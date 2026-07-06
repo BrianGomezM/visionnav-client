@@ -50,8 +50,14 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es" className={`${geist.variable} ${geistMono.variable} bg-background`}>
-      <body className="font-sans antialiased min-h-screen">
+    // suppressHydrationWarning evita falsos errores de extensiones del navegador
+    // (QuillBot, ColorZilla) que inyectan atributos al DOM antes de que React hidrate.
+    <html
+      lang="es"
+      className={`${geist.variable} ${geistMono.variable} bg-background`}
+      suppressHydrationWarning
+    >
+      <body className="font-sans antialiased min-h-screen" suppressHydrationWarning>
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

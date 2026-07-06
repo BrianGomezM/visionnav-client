@@ -1,12 +1,31 @@
 'use client'
 
-import { Eye, Settings, Sun, Moon, Scan, Bug, Activity } from 'lucide-react'
+import {
+  Eye,
+  Settings,
+  Sun,
+  Moon,
+  Scan,
+  Bug,
+  Activity,
+  BarChart2,
+  Database,
+  FlaskConical,
+  Star,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { useEffect, useState } from 'react'
 
-type Tab = 'detect' | 'debug' | 'health'
+export type Tab =
+  | 'detect'
+  | 'debug'
+  | 'health'
+  | 'metrics'
+  | 'dataset'
+  | 'testing'
+  | 'feedback'
 
 interface HeaderProps {
   activeTab: Tab
@@ -15,28 +34,79 @@ interface HeaderProps {
   isSettingsOpen: boolean
 }
 
-const tabs = [
+const tabs: {
+  id: Tab
+  label: string
+  Icon: React.ElementType
+  tooltip: string
+  color?: string
+  activeBg?: string
+  activeText?: string
+}[] = [
   {
-    id: 'detect' as const,
+    id: 'detect',
     label: 'Detectar',
     Icon: Scan,
-    tooltip: 'Analiza una imagen y genera una descripción auditiva de la escena para navegación asistida',
+    tooltip: 'Analiza una imagen y genera una descripción auditiva egocéntrica para navegación asistida',
+    activeBg: 'bg-[#E1F5EE]',
+    activeText: 'text-[#0F6E56]',
   },
   {
-    id: 'debug' as const,
+    id: 'debug',
     label: 'Pipeline',
     Icon: Bug,
-    tooltip: 'Inspecciona cada etapa del proceso de análisis con métricas y datos detallados de cada paso',
+    tooltip: 'Inspecciona cada etapa del pipeline de análisis: YOLO, espacial, LLM y narrativa final',
+    activeBg: 'bg-[#EEEDFE]',
+    activeText: 'text-[#7F77DD]',
   },
   {
-    id: 'health' as const,
+    id: 'health',
     label: 'Estado',
     Icon: Activity,
-    tooltip: 'Verifica el estado de los modelos de IA: detección de objetos, LLM y síntesis de voz',
+    tooltip: 'Verifica el estado de los modelos de IA: YOLO, LLM (Groq) y síntesis de voz (TTS)',
+    activeBg: 'bg-[#E1F5EE]',
+    activeText: 'text-[#0F6E56]',
+  },
+  {
+    id: 'metrics',
+    label: 'Métricas',
+    Icon: BarChart2,
+    tooltip: 'Estadísticas de producción: latencia, percentiles p50–p99, distribución de escenarios',
+    activeBg: 'bg-[#E1F5EE]',
+    activeText: 'text-[#0F6E56]',
+  },
+  {
+    id: 'dataset',
+    label: 'Dataset',
+    Icon: Database,
+    tooltip: 'Acumula imágenes etiquetadas y prepara el dataset para fine-tuning de YOLO26s',
+    activeBg: 'bg-[#E0F2FE]',
+    activeText: 'text-[#0369A1]',
+  },
+  {
+    id: 'testing',
+    label: 'Pruebas',
+    Icon: FlaskConical,
+    tooltip: 'Suite de pruebas funcionales automáticas y pruebas de carga parametrizables',
+    activeBg: 'bg-[#EEEDFE]',
+    activeText: 'text-[#7F77DD]',
+  },
+  {
+    id: 'feedback',
+    label: 'Feedback',
+    Icon: Star,
+    tooltip: 'Evaluación de utilidad de las narrativas por usuarios (escala Likert 1–5)',
+    activeBg: 'bg-[#FEF3C7]',
+    activeText: 'text-[#92400E]',
   },
 ]
 
-export function Header({ activeTab, onTabChange, onSettingsClick, isSettingsOpen }: HeaderProps) {
+export function Header({
+  activeTab,
+  onTabChange,
+  onSettingsClick,
+  isSettingsOpen,
+}: HeaderProps) {
   const [isDark, setIsDark] = useState(false)
 
   useEffect(() => {
@@ -58,16 +128,23 @@ export function Header({ activeTab, onTabChange, onSettingsClick, isSettingsOpen
             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-[#1D9E75] text-white">
               <Eye className="w-5 h-5" aria-hidden="true" />
             </div>
-            <span className="font-semibold text-lg text-foreground">VisionNav</span>
+            <div className="hidden sm:block">
+              <span className="font-semibold text-lg text-foreground leading-none">
+                VisionNav
+              </span>
+              <p className="text-[10px] text-muted-foreground leading-none mt-0.5">
+                Navegación visual asistida
+              </p>
+            </div>
           </div>
 
           {/* Desktop tab navigation */}
           <nav
-            className="hidden sm:flex items-center gap-1"
+            className="hidden lg:flex items-center gap-0.5"
             role="tablist"
             aria-label="Navegación principal"
           >
-            {tabs.map(({ id, label, Icon, tooltip }) => (
+            {tabs.map(({ id, label, Icon, tooltip, activeBg, activeText }) => (
               <Tooltip key={id}>
                 <TooltipTrigger asChild>
                   <button
@@ -76,9 +153,9 @@ export function Header({ activeTab, onTabChange, onSettingsClick, isSettingsOpen
                     aria-controls={`${id}-panel`}
                     onClick={() => onTabChange(id)}
                     className={cn(
-                      'flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-150',
+                      'flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-150',
                       activeTab === id
-                        ? 'bg-[#E1F5EE] text-[#0F6E56]'
+                        ? cn(activeBg ?? 'bg-[#E1F5EE]', activeText ?? 'text-[#0F6E56]')
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                     )}
                   >
@@ -86,14 +163,14 @@ export function Header({ activeTab, onTabChange, onSettingsClick, isSettingsOpen
                     {label}
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[220px] text-center">
+                <TooltipContent side="bottom" className="max-w-[240px] text-center">
                   {tooltip}
                 </TooltipContent>
               </Tooltip>
             ))}
           </nav>
 
-          {/* Actions */}
+          {/* Acciones */}
           <div className="flex items-center gap-1 shrink-0">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -135,13 +212,13 @@ export function Header({ activeTab, onTabChange, onSettingsClick, isSettingsOpen
           </div>
         </div>
 
-        {/* Mobile tab navigation */}
+        {/* Mobile/tablet tab navigation — scroll horizontal */}
         <nav
-          className="sm:hidden flex items-center gap-1 pb-3 overflow-x-auto"
+          className="lg:hidden flex items-center gap-1 pb-3 overflow-x-auto scrollbar-none"
           role="tablist"
           aria-label="Navegación principal"
         >
-          {tabs.map(({ id, label, Icon }) => (
+          {tabs.map(({ id, label, Icon, activeBg, activeText }) => (
             <button
               key={id}
               role="tab"
@@ -149,9 +226,9 @@ export function Header({ activeTab, onTabChange, onSettingsClick, isSettingsOpen
               aria-controls={`${id}-panel`}
               onClick={() => onTabChange(id)}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors duration-150',
+                'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors duration-150 shrink-0',
                 activeTab === id
-                  ? 'bg-[#E1F5EE] text-[#0F6E56]'
+                  ? cn(activeBg ?? 'bg-[#E1F5EE]', activeText ?? 'text-[#0F6E56]')
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               )}
             >

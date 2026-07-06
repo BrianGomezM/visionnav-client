@@ -10,7 +10,18 @@ export interface DetectResponse {
     archivo?: string
     content_type?: string
     data_base64?: string
+    data_uri?: string
     tamano_bytes?: number
+  }
+  /** Imagen con bounding boxes dibujados por detection_visualizer */
+  imagen_anotada: {
+    disponible: boolean
+    archivo: string | null
+    /** URL relativa al servidor: /detections/<nombre>.jpg */
+    url: string | null
+    data_base64: string | null
+    /** data URI lista para usar en <img src="..."> */
+    data_uri: string | null
   }
   escenario: {
     tipo: string
@@ -25,9 +36,11 @@ export interface DetectResponse {
     decision_ms: number
     escenario_ms: number
     llm_ms: number
+    visualizer_ms?: number
     total_ms: number
     tts_ms?: number
     objetos_detectados: number
+    confianza_prom?: number
     umbral_confianza: number
     imagen: {
       original: string

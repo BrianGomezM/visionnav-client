@@ -10,6 +10,7 @@ import { ProgressBar } from '@/components/shared/progress-bar'
 import { NarrativeCard } from '@/components/detect/narrative-card'
 import { AudioSection } from '@/components/detect/audio-section'
 import { SceneMetrics } from '@/components/detect/scene-metrics'
+import { AnnotatedImageCard } from '@/components/detect/annotated-image-card'
 import { useDetect } from '@/hooks/use-detect'
 
 const LOADING_MESSAGES = [
@@ -143,6 +144,10 @@ export function DetectTab({ baseUrl, confidenceThreshold, onHasDataChange }: Det
         {data && !isLoading && (
           <>
             <NarrativeCard narrative={data.narrativa_final} />
+            <AnnotatedImageCard
+              imagenAnotada={data.imagen_anotada}
+              baseUrl={baseUrl}
+            />
             <AudioSection
               audioAvailable={data.audio?.disponible || false}
               audioBase64={data.audio?.data_base64}
