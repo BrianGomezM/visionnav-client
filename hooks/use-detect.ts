@@ -2,17 +2,26 @@
 
 import { useState, useCallback } from 'react'
 
+export type TtsUnavailableReason =
+  | 'cuota_excedida'
+  | 'error_sintesis'
+  | 'tts_desactivado'
+  | null
+
+export interface AudioInfo {
+  disponible: boolean
+  razon?: TtsUnavailableReason
+  archivo?: string | null
+  content_type?: string | null
+  data_base64?: string | null
+  data_uri?: string | null
+  tamano_bytes?: number | null
+}
+
 export interface DetectResponse {
   status: 'success' | 'error'
   narrativa_final: string
-  audio: {
-    disponible: boolean
-    archivo?: string
-    content_type?: string
-    data_base64?: string
-    data_uri?: string
-    tamano_bytes?: number
-  }
+  audio: AudioInfo
   /** Imagen con bounding boxes dibujados por detection_visualizer */
   imagen_anotada: {
     disponible: boolean
@@ -52,9 +61,11 @@ export interface DetectResponse {
 interface UseDetectOptions {
   baseUrl: string
   confidenceThreshold: number
+  /** ID de modelo Gemini TTS a usar, o null para el TTS_MODEL por defecto del servidor. */
+  ttsModel?: string | null
 }
 
-export function useDetect({ baseUrl, confidenceThreshold }: UseDetectOptions) {
+export function useDetect({ baseUrl, confidenceThreshold, ttsModel }: UseDetectOptions) {
   const [data, setData] = useState<DetectResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -69,6 +80,9 @@ export function useDetect({ baseUrl, confidenceThreshold }: UseDetectOptions) {
       form.append('file', file)
       form.append('confidence_threshold', confidenceThreshold.toString())
       form.append('debug', 'false')
+      if (ttsModel) {
+        form.append('tts_model', ttsModel)
+      }
 
       const res = await fetch(`${baseUrl}/api/detect`, {
         method: 'POST',
@@ -94,7 +108,7 @@ export function useDetect({ baseUrl, confidenceThreshold }: UseDetectOptions) {
     } finally {
       setIsLoading(false)
     }
-  }, [baseUrl, confidenceThreshold])
+  }, [baseUrl, confidenceThreshold, ttsModel])
 
   const reset = useCallback(() => {
     setData(null)

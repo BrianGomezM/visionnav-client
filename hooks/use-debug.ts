@@ -74,6 +74,14 @@ export interface FinalNarrative {
   narrativa_completa: string
 }
 
+export interface AnnotatedImageInfo {
+  disponible: boolean
+  archivo: string | null
+  url: string | null
+  data_base64: string | null
+  data_uri: string | null
+}
+
 export interface DebugResponse {
   imagen: {
     original: string
@@ -81,6 +89,8 @@ export interface DebugResponse {
   }
   threshold: number
   narrativa_final: string
+  /** Imagen con bounding boxes dibujados por detection_visualizer */
+  imagen_anotada: AnnotatedImageInfo
   tiempos: {
     deteccion_ms: number
     espacial_ms: number

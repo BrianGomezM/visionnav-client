@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { ScanSearch, ZoomIn, Download, ExternalLink } from 'lucide-react'
+import { ScanSearch, Maximize2, Download, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ImageLightbox } from '@/components/shared/image-lightbox'
 
 interface AnnotatedImageCardProps {
   /** Información de la imagen anotada retornada por /api/detect */
@@ -25,7 +26,7 @@ interface AnnotatedImageCardProps {
  * por lo que no requiere una segunda petición al servidor.
  */
 export function AnnotatedImageCard({ imagenAnotada, baseUrl }: AnnotatedImageCardProps) {
-  const [expanded, setExpanded] = useState(false)
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false)
 
   if (!imagenAnotada.disponible || !imagenAnotada.data_uri) {
     return (
@@ -51,6 +52,7 @@ export function AnnotatedImageCard({ imagenAnotada, baseUrl }: AnnotatedImageCar
   }
 
   return (
+    <>
     <div
       className="rounded-xl border border-border bg-card overflow-hidden shadow-sm animate-fade-in-up"
       style={{ animationDelay: '50ms' }}
@@ -94,47 +96,38 @@ export function AnnotatedImageCard({ imagenAnotada, baseUrl }: AnnotatedImageCar
             <Download className="w-3.5 h-3.5" />
           </Button>
 
-          {/* Expandir/Contraer */}
+          {/* Ampliar (lightbox de pantalla completa) */}
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setExpanded(!expanded)}
+            onClick={() => setIsLightboxOpen(true)}
             className="w-7 h-7"
-            title={expanded ? 'Contraer' : 'Expandir'}
+            title="Ampliar imagen"
           >
-            <ZoomIn className="w-3.5 h-3.5" />
+            <Maximize2 className="w-3.5 h-3.5" />
           </Button>
         </div>
       </div>
 
       {/* Imagen */}
-      <div
-        className={`relative bg-zinc-950 transition-all duration-300 ${
-          expanded ? 'max-h-[600px]' : 'max-h-64'
-        } overflow-hidden`}
-      >
+      <div className="relative bg-zinc-950 group">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={imagenAnotada.data_uri}
           alt="Imagen de la escena con bounding boxes de detecciones YOLO"
-          className={`w-full object-contain transition-all duration-300 ${
-            expanded ? 'max-h-[600px]' : 'max-h-64'
-          } cursor-pointer`}
-          onClick={() => setExpanded(!expanded)}
+          className="w-full max-h-96 object-contain cursor-zoom-in transition-transform duration-200 group-hover:scale-[1.01]"
+          onClick={() => setIsLightboxOpen(true)}
           loading="lazy"
         />
 
-        {/* Overlay de indicación cuando está contraída */}
-        {!expanded && (
-          <div
-            className="absolute inset-0 flex items-end justify-center pb-2 pointer-events-none"
-            aria-hidden="true"
-          >
-            <span className="px-2 py-0.5 rounded text-xs bg-black/60 text-white/80">
-              Clic para expandir
-            </span>
-          </div>
-        )}
+        <div
+          className="absolute inset-0 flex items-end justify-center pb-2 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
+          aria-hidden="true"
+        >
+          <span className="px-2 py-0.5 rounded text-xs bg-black/60 text-white/80">
+            Clic para ampliar
+          </span>
+        </div>
       </div>
 
       {/* Leyenda de colores */}
@@ -163,5 +156,20 @@ export function AnnotatedImageCard({ imagenAnotada, baseUrl }: AnnotatedImageCar
         </div>
       </div>
     </div>
+
+    {/* Renderizado FUERA de la tarjeta: si va anidado dentro de un
+        contenedor con overflow-hidden + animación (transform), ese
+        ancestro crea un "containing block" que rompe position:fixed
+        y el lightbox queda atrapado dentro de la tarjeta en vez de
+        cubrir toda la pantalla. */}
+    {isLightboxOpen && (
+      <ImageLightbox
+        src={imagenAnotada.data_uri}
+        alt="Imagen de la escena con bounding boxes de detecciones YOLO"
+        fileName={imagenAnotada.archivo?.split('/').pop()}
+        onClose={() => setIsLightboxOpen(false)}
+      />
+    )}
+    </>
   )
 }

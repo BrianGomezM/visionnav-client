@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Layers,
   Tag,
+  Rocket,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -105,12 +106,26 @@ export function DatasetTab({ baseUrl, isActive }: DatasetTabProps) {
       <div>
         <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
           <Database className="w-5 h-5 text-[#0EA5E9]" />
-          Dataset y Fine-tuning
+          Trabajos futuros — Dataset y Fine-tuning
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Acumula imágenes etiquetadas automáticamente por YOLO para fine-tuning
-          del modelo en el dominio específico del proyecto.
+          Acumula imágenes etiquetadas automáticamente por YOLO para preparar, en un
+          trabajo futuro, un fine-tuning del modelo en el dominio específico del proyecto.
         </p>
+      </div>
+
+      {/* Banner de módulo congelado */}
+      <div className="flex items-start gap-3 p-4 rounded-xl border border-[#0EA5E9]/30 bg-[#E0F2FE]">
+        <Rocket className="w-5 h-5 text-[#0369A1] shrink-0 mt-0.5" />
+        <div className="text-sm text-[#0369A1]">
+          <p className="font-medium">Módulo congelado — entregado como producto final</p>
+          <p className="text-xs mt-1 opacity-90">
+            Este módulo es funcional y queda documentado como base para un trabajo futuro
+            (fine-tuning de YOLO26s con datos propios del entorno Web3D). No forma parte del
+            alcance evaluado en el Objetivo 3 de esta tesis y no recibirá más desarrollo dentro
+            de este proyecto.
+          </p>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">

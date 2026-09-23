@@ -24,15 +24,15 @@ const LOADING_MESSAGES = [
 interface DetectTabProps {
   baseUrl: string
   confidenceThreshold: number
-  onHasDataChange?: (hasData: boolean) => void
+  ttsModel?: string | null
 }
 
-export function DetectTab({ baseUrl, confidenceThreshold, onHasDataChange }: DetectTabProps) {
+export function DetectTab({ baseUrl, confidenceThreshold, ttsModel }: DetectTabProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0)
 
-  const { data, isLoading, error, detect, reset } = useDetect({ baseUrl, confidenceThreshold })
+  const { data, isLoading, error, detect, reset } = useDetect({ baseUrl, confidenceThreshold, ttsModel })
 
   // Cycle through messages during long API calls for better perceived performance
   useEffect(() => {
@@ -45,11 +45,6 @@ export function DetectTab({ baseUrl, confidenceThreshold, onHasDataChange }: Det
     }, 2500)
     return () => clearInterval(interval)
   }, [isLoading])
-
-  // Report state to parent so it can show a warning before tab switching
-  useEffect(() => {
-    onHasDataChange?.(selectedFile !== null || data !== null || isLoading)
-  }, [selectedFile, data, isLoading, onHasDataChange])
 
   const handleFileSelect = useCallback((file: File | null) => {
     setSelectedFile(file)
@@ -153,6 +148,7 @@ export function DetectTab({ baseUrl, confidenceThreshold, onHasDataChange }: Det
               audioBase64={data.audio?.data_base64}
               contentType={data.audio?.content_type}
               narrative={data.narrativa_final}
+              ttsReason={data.audio?.razon}
             />
             <SceneMetrics
               escenario={data.escenario}

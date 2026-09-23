@@ -3,15 +3,23 @@
 import { useState, useCallback, useMemo } from 'react'
 import { Volume2, Play, Pause, StopCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import type { TtsUnavailableReason } from '@/hooks/use-detect'
+
+const REASON_LABEL: Record<Exclude<TtsUnavailableReason, null>, string> = {
+  cuota_excedida: 'Cuota de Google TTS agotada',
+  error_sintesis: 'Falló la síntesis',
+  tts_desactivado: 'TTS no configurado en el servidor',
+}
 
 interface AudioSectionProps {
   audioAvailable: boolean
-  audioBase64?: string
-  contentType?: string
+  audioBase64?: string | null
+  contentType?: string | null
   narrative: string
+  ttsReason?: TtsUnavailableReason
 }
 
-export function AudioSection({ audioAvailable, audioBase64, contentType, narrative }: AudioSectionProps) {
+export function AudioSection({ audioAvailable, audioBase64, contentType, narrative, ttsReason }: AudioSectionProps) {
   const [isSpeaking, setIsSpeaking] = useState(false)
 
   // Create data URI from base64
@@ -30,13 +38,13 @@ export function AudioSection({ audioAvailable, audioBase64, contentType, narrati
       } else {
         // Cancel any ongoing speech
         window.speechSynthesis.cancel()
-        
+
         const utterance = new SpeechSynthesisUtterance(narrative)
         utterance.lang = 'es-ES'
         utterance.rate = 0.92
         utterance.onend = () => setIsSpeaking(false)
         utterance.onerror = () => setIsSpeaking(false)
-        
+
         setIsSpeaking(true)
         window.speechSynthesis.speak(utterance)
       }
@@ -119,7 +127,7 @@ export function AudioSection({ audioAvailable, audioBase64, contentType, narrati
           </span>
         ) : (
           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#FAEEDA] text-[#BA7517]">
-            TTS no disponible
+            {ttsReason ? REASON_LABEL[ttsReason] : 'TTS no disponible'}
           </span>
         )}
       </div>

@@ -7,6 +7,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { ImageUploader } from '@/components/shared/image-uploader'
 import { ErrorCard } from '@/components/shared/error-card'
 import { ProgressBar } from '@/components/shared/progress-bar'
+import { AnnotatedImageCard } from '@/components/detect/annotated-image-card'
 import { PipelineStep } from '@/components/debug/pipeline-step'
 import { ZoneBar } from '@/components/debug/zone-bar'
 import { useDebug } from '@/hooks/use-debug'
@@ -25,10 +26,9 @@ const LOADING_MESSAGES = [
 interface DebugTabProps {
   baseUrl: string
   confidenceThreshold: number
-  onHasDataChange?: (hasData: boolean) => void
 }
 
-export function DebugTab({ baseUrl, confidenceThreshold, onHasDataChange }: DebugTabProps) {
+export function DebugTab({ baseUrl, confidenceThreshold }: DebugTabProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0)
@@ -46,11 +46,6 @@ export function DebugTab({ baseUrl, confidenceThreshold, onHasDataChange }: Debu
     }, 2000)
     return () => clearInterval(interval)
   }, [isLoading])
-
-  // Report state to parent so it can warn before tab switching
-  useEffect(() => {
-    onHasDataChange?.(selectedFile !== null || data !== null || isLoading)
-  }, [selectedFile, data, isLoading, onHasDataChange])
 
   const handleFileSelect = useCallback((file: File | null) => {
     setSelectedFile(file)
@@ -215,6 +210,15 @@ export function DebugTab({ baseUrl, confidenceThreshold, onHasDataChange }: Debu
               </div>
             </details>
           </div>
+        )}
+
+        {/* Imagen con bounding boxes de YOLO — debajo de la imagen cargada,
+            mismo componente y lightbox con zoom que en la pestaña Detectar. */}
+        {data && (
+          <AnnotatedImageCard
+            imagenAnotada={data.imagen_anotada}
+            baseUrl={baseUrl}
+          />
         )}
       </div>
 

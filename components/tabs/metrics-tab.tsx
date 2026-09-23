@@ -1,14 +1,31 @@
 'use client'
 
-import { RefreshCw, BarChart2, Clock, Package, AlertCircle, Info } from 'lucide-react'
+import { RefreshCw, BarChart2, Clock, Package, AlertCircle, Info, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorCard } from '@/components/shared/error-card'
 import { LatencyChart } from '@/components/metrics/latency-chart'
 import { PercentileBar } from '@/components/metrics/percentile-bar'
 import { ScenarioDistribution } from '@/components/metrics/scenario-distribution'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useMetricsSummary, useMetricsLatency, useMetricsSession } from '@/hooks/use-metrics'
 import { cn } from '@/lib/utils'
+
+/** Icono de ayuda con tooltip explicativo, para usar junto a etiquetas técnicas. */
+function HelpTip({ children }: { children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground align-middle" aria-label="Ayuda">
+          <HelpCircle className="w-3.5 h-3.5 inline" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[260px] text-left">
+        {children}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
 
 interface MetricsTabProps {
   baseUrl: string
@@ -23,6 +40,7 @@ function MetricCard({
   icon: Icon,
   color = '#1D9E75',
   bgColor = '#E1F5EE',
+  tooltip,
 }: {
   label: string
   value: string | number
@@ -30,6 +48,7 @@ function MetricCard({
   icon: React.ElementType
   color?: string
   bgColor?: string
+  tooltip?: string
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-5 flex items-start gap-4">
@@ -40,7 +59,10 @@ function MetricCard({
         <Icon className="w-5 h-5" style={{ color }} aria-hidden="true" />
       </div>
       <div className="min-w-0">
-        <p className="text-xs text-muted-foreground mb-1">{label}</p>
+        <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+          {label}
+          {tooltip && <HelpTip>{tooltip}</HelpTip>}
+        </p>
         <p className="text-2xl font-bold text-foreground leading-none">{value}</p>
         {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
       </div>
@@ -142,6 +164,7 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
               label="Total solicitudes"
               value={summary.data.total_solicitudes}
               icon={BarChart2}
+              tooltip="Número total de imágenes procesadas por /api/detect desde el último inicio del servidor. Cada una cuenta como una solicitud, sin importar cuántos objetos haya detectado."
             />
             <MetricCard
               label="Latencia promedio"
@@ -154,6 +177,7 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
               icon={Clock}
               color="#7F77DD"
               bgColor="#EEEDFE"
+              tooltip="Tiempo promedio, en milisegundos, entre que llega la imagen y se entrega la respuesta completa (detección + narrativa + audio). 1000 ms = 1 segundo."
             />
             <MetricCard
               label="Objetos promedio"
@@ -162,6 +186,7 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
               icon={Package}
               color="#BA7517"
               bgColor="#FAEEDA"
+              tooltip="Cantidad promedio de objetos que YOLO26s detecta por imagen, considerando todas las solicitudes registradas."
             />
             <MetricCard
               label="Máximo detectado"
@@ -170,6 +195,7 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
               icon={AlertCircle}
               color="#0EA5E9"
               bgColor="#E0F2FE"
+              tooltip="La imagen con más objetos detectados de todo el historial. Útil para saber qué tan compleja puede llegar a ser una escena real."
             />
           </div>
 
@@ -190,6 +216,12 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
               <h3 className="font-medium text-foreground mb-4 flex items-center gap-2">
                 <Clock className="w-4 h-4 text-[#1D9E75]" />
                 Percentiles de latencia total
+                <HelpTip>
+                  Un percentil "pX" indica el tiempo bajo el cual queda el X% de las solicitudes.
+                  Por ejemplo, p95 = 3000 ms significa que el 95% de las solicitudes respondieron
+                  en 3 segundos o menos; solo el 5% (las más lentas) tardó más. p50 es la mediana:
+                  la mitad de las solicitudes fue más rápida y la mitad más lenta.
+                </HelpTip>
               </h3>
               <div className="space-y-3">
                 <PercentileBar
@@ -243,8 +275,13 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
 
             {/* Distribución de escenarios */}
             <div className="rounded-xl border border-border bg-card p-5">
-              <h3 className="font-medium text-foreground mb-4">
+              <h3 className="font-medium text-foreground mb-4 flex items-center gap-2">
                 Escenarios detectados
+                <HelpTip>
+                  Cuántas veces el clasificador de escenario asignó cada categoría (comedor,
+                  sala de estar, espacio exterior, etc.) a las imágenes procesadas. Ayuda a ver
+                  si el sistema tiende a favorecer ciertas categorías sobre otras.
+                </HelpTip>
               </h3>
               <ScenarioDistribution data={summary.data.escenarios_detectados} />
             </div>
@@ -299,7 +336,7 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
           </div>
 
           {session.data.tts && (
-            <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mt-4 flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[#E1F5EE] text-[#0F6E56]">
                 TTS exitoso: {session.data.tts.exitoso}
               </span>
@@ -309,6 +346,11 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
               <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">
                 Tasa éxito TTS: {session.data.tts.tasa_exito}
               </span>
+              <HelpTip>
+                "Fallido" cuenta las veces que Gemini TTS no devolvió audio (por ejemplo, un
+                error temporal del servicio de Google): la narrativa igual se entrega en texto,
+                pero sin audio. No indica un error del detector ni de la narrativa.
+              </HelpTip>
             </div>
           )}
         </div>

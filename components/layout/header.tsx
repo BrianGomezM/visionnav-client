@@ -9,9 +9,8 @@ import {
   Bug,
   Activity,
   BarChart2,
-  Database,
-  FlaskConical,
-  Star,
+  Rocket,
+  Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -24,8 +23,7 @@ export type Tab =
   | 'health'
   | 'metrics'
   | 'dataset'
-  | 'testing'
-  | 'feedback'
+  | 'study'
 
 interface HeaderProps {
   activeTab: Tab
@@ -77,27 +75,19 @@ const tabs: {
   },
   {
     id: 'dataset',
-    label: 'Dataset',
-    Icon: Database,
-    tooltip: 'Acumula imágenes etiquetadas y prepara el dataset para fine-tuning de YOLO26s',
+    label: 'Trabajos futuros',
+    Icon: Rocket,
+    tooltip: 'Módulo de acumulación de dataset y fine-tuning: funcional, congelado como línea de trabajo futuro, no forma parte del alcance evaluado en esta tesis',
     activeBg: 'bg-[#E0F2FE]',
     activeText: 'text-[#0369A1]',
   },
   {
-    id: 'testing',
-    label: 'Pruebas',
-    Icon: FlaskConical,
-    tooltip: 'Suite de pruebas funcionales automáticas y pruebas de carga parametrizables',
+    id: 'study',
+    label: 'Evaluación con usuarios',
+    Icon: Users,
+    tooltip: 'Sesiones de prueba con usuarios objetivo (discapacidad visual) y usuarios piloto (validación del instrumento)',
     activeBg: 'bg-[#EEEDFE]',
     activeText: 'text-[#7F77DD]',
-  },
-  {
-    id: 'feedback',
-    label: 'Feedback',
-    Icon: Star,
-    tooltip: 'Evaluación de utilidad de las narrativas por usuarios (escala Likert 1–5)',
-    activeBg: 'bg-[#FEF3C7]',
-    activeText: 'text-[#92400E]',
   },
 ]
 

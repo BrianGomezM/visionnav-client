@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback } from 'react'
 interface ApiConfig {
   baseUrl: string
   confidenceThreshold: number
+  /** ID de modelo Gemini TTS a usar, o null para el TTS_MODEL por defecto del servidor (.env). */
+  ttsModel: string | null
 }
 
 // Environment variable takes priority, otherwise use default
@@ -18,6 +20,7 @@ const getDefaultBaseUrl = () => {
 const DEFAULT_CONFIG: ApiConfig = {
   baseUrl: getDefaultBaseUrl(),
   confidenceThreshold: 0.35,
+  ttsModel: null,
 }
 
 const STORAGE_KEY = 'visionnav-config'
@@ -66,6 +69,7 @@ export function useApiConfig() {
     const resetTo = {
       baseUrl: defaultUrl,
       confidenceThreshold: 0.35,
+      ttsModel: null,
     }
     setConfig(resetTo)
     try {
