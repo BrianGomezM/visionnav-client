@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import useSWR from 'swr'
+import { apiFetch } from '@/lib/api-client'
 
 // ─────────────────────────────────────────────
 // TIPOS — /api/feedback
@@ -38,7 +39,7 @@ export interface FeedbackPayload {
 // FETCHER GENÉRICO
 // ─────────────────────────────────────────────
 const fetcher = async (url: string) => {
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) throw new Error(`Error ${res.status}: ${res.statusText}`)
   return res.json()
 }
@@ -75,7 +76,7 @@ export function useSubmitFeedback(baseUrl: string) {
       setSuccess(false)
 
       try {
-        const res = await fetch(`${baseUrl}/api/feedback`, {
+        const res = await apiFetch(`${baseUrl}/api/feedback`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),

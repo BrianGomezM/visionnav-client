@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import useSWR from 'swr'
+import { apiFetch } from '@/lib/api-client'
 
 // ─────────────────────────────────────────────
 // TIPOS — /api/test/functional
@@ -69,7 +70,7 @@ export interface TestHistory {
 // FETCHER GENÉRICO
 // ─────────────────────────────────────────────
 const fetcher = async (url: string) => {
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) throw new Error(`Error ${res.status}: ${res.statusText}`)
   return res.json()
 }
@@ -109,7 +110,7 @@ export function useFunctionalTests(baseUrl: string) {
         const form = new FormData()
         form.append('base_url', targetBaseUrl ?? baseUrl)
 
-        const res = await fetch(`${baseUrl}/api/test/functional`, {
+        const res = await apiFetch(`${baseUrl}/api/test/functional`, {
           method: 'POST',
           body: form,
         })
@@ -160,7 +161,7 @@ export function useLoadTest(baseUrl: string) {
         form.append('base_url', baseUrl)
         form.append('image_path', imagePath)
 
-        const res = await fetch(`${baseUrl}/api/test/load`, {
+        const res = await apiFetch(`${baseUrl}/api/test/load`, {
           method: 'POST',
           body: form,
         })

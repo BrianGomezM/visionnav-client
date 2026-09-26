@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { apiFetch } from '@/lib/api-client'
 
 export interface TtsModelOption {
   id: string
@@ -21,7 +22,7 @@ export function useTtsModels(baseUrl: string) {
   useEffect(() => {
     let cancelled = false
 
-    fetch(`${baseUrl}/api/tts/models`)
+    apiFetch(`${baseUrl}/api/tts/models`)
       .then(res => (res.ok ? res.json() : Promise.reject()))
       .then((data: TtsModelsResponse) => {
         if (cancelled) return

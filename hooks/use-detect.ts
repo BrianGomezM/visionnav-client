@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { apiFetch } from '@/lib/api-client'
 
 export type TtsUnavailableReason =
   | 'cuota_excedida'
@@ -84,7 +85,7 @@ export function useDetect({ baseUrl, confidenceThreshold, ttsModel }: UseDetectO
         form.append('tts_model', ttsModel)
       }
 
-      const res = await fetch(`${baseUrl}/api/detect`, {
+      const res = await apiFetch(`${baseUrl}/api/detect`, {
         method: 'POST',
         body: form,
       })

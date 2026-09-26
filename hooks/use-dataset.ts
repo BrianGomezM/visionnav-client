@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import useSWR from 'swr'
+import { apiFetch } from '@/lib/api-client'
 
 // ─────────────────────────────────────────────
 // TIPOS — /api/dataset/upload
@@ -56,7 +57,7 @@ export interface FinetuneResult {
 // FETCHER GENÉRICO
 // ─────────────────────────────────────────────
 const fetcher = async (url: string) => {
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) throw new Error(`Error ${res.status}: ${res.statusText}`)
   return res.json()
 }
@@ -115,7 +116,7 @@ export function useDatasetUpload(baseUrl: string) {
         form.append('scene_type', sceneType)
         form.append('auto_label', autoLabel.toString())
 
-        const res = await fetch(`${baseUrl}/api/dataset/upload`, {
+        const res = await apiFetch(`${baseUrl}/api/dataset/upload`, {
           method: 'POST',
           body: form,
         })
@@ -169,7 +170,7 @@ export function useFinetunePrepare(baseUrl: string) {
         form.append('train_split', trainSplit.toString())
         form.append('min_images', minImages.toString())
 
-        const res = await fetch(`${baseUrl}/api/finetune/prepare`, {
+        const res = await apiFetch(`${baseUrl}/api/finetune/prepare`, {
           method: 'POST',
           body: form,
         })

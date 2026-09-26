@@ -31,7 +31,7 @@ import {
   useDeleteSession,
   type TipoParticipante,
 } from '@/hooks/use-study'
-import { getTestsForTrack, type StudyTest } from '@/lib/study-tests'
+import { useCatalog, type StudyTest } from '@/hooks/use-catalog'
 import { cn } from '@/lib/utils'
 
 interface StudyTabProps {
@@ -148,8 +148,10 @@ export function StudyTab({ baseUrl, confidenceThreshold, isActive }: StudyTabPro
     [detail.data]
   )
 
+  // Pruebas desde el catálogo único del backend (GET /api/catalog), ya no desde el cliente.
+  const catalogApi = useCatalog(baseUrl)
   const track = detail.data?.participant.tipo_participante ?? 'piloto'
-  const catalogo = getTestsForTrack(track)
+  const catalogo = catalogApi.testsForTrack(track)
   const selectedTest = catalogo.find((t) => t.id === selectedTestId) ?? null
 
   // ── Vista: sin sesión activa → registro / historial ──
@@ -395,6 +397,14 @@ export function StudyTab({ baseUrl, confidenceThreshold, isActive }: StudyTabPro
       <div className="grid lg:grid-cols-3 gap-6">
         {/* ── Menú de pruebas ── */}
         <div className="space-y-2">
+          {catalogApi.isLoading && (
+            <p className="text-sm text-muted-foreground">Cargando catálogo de pruebas…</p>
+          )}
+          {catalogApi.error && (
+            <p className="text-sm text-destructive" role="alert">
+              No se pudo cargar el catálogo de pruebas: {catalogApi.error}
+            </p>
+          )}
           {catalogo.map((t) => (
             <button
               key={t.id}

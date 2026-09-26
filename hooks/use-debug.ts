@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { apiFetch } from '@/lib/api-client'
 
 // Types matching the actual API response
 export interface BBox {
@@ -144,7 +145,7 @@ export function useDebug({ baseUrl, confidenceThreshold }: UseDebugOptions) {
       form.append('file', file)
       form.append('confidence_threshold', confidenceThreshold.toString())
 
-      const res = await fetch(`${baseUrl}/api/debug-detect`, {
+      const res = await apiFetch(`${baseUrl}/api/debug-detect`, {
         method: 'POST',
         body: form,
       })

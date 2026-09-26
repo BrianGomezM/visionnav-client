@@ -1,6 +1,7 @@
 'use client'
 
 import useSWR from 'swr'
+import { apiFetch } from '@/lib/api-client'
 
 export interface HealthResponse {
   status: 'healthy' | 'unhealthy'
@@ -28,7 +29,7 @@ export interface HealthResponse {
 }
 
 const fetcher = async (url: string): Promise<HealthResponse> => {
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   
   if (!res.ok) {
     throw new Error(`Error ${res.status}: ${res.statusText}`)

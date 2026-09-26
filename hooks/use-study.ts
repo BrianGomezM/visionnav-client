@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import useSWR from 'swr'
+import { apiFetch } from '@/lib/api-client'
 
 // ─────────────────────────────────────────────
 // TIPOS — /api/study/sessions
@@ -70,7 +71,7 @@ export interface ResponsePayload {
 // FETCHER GENÉRICO
 // ─────────────────────────────────────────────
 const fetcher = async (url: string) => {
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) throw new Error(`Error ${res.status}: ${res.statusText}`)
   return res.json()
 }
@@ -129,7 +130,7 @@ export function useCreateSession(baseUrl: string) {
       setIsLoading(true)
       setError(null)
       try {
-        const res = await fetch(`${baseUrl}/api/study/sessions`, {
+        const res = await apiFetch(`${baseUrl}/api/study/sessions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -162,7 +163,7 @@ export function useAddResponse(baseUrl: string) {
       setIsLoading(true)
       setError(null)
       try {
-        const res = await fetch(`${baseUrl}/api/study/sessions/${sessionId}/responses`, {
+        const res = await apiFetch(`${baseUrl}/api/study/sessions/${sessionId}/responses`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -193,7 +194,7 @@ export function useDeleteSession(baseUrl: string) {
     async (sessionId: string) => {
       setIsLoading(true)
       try {
-        const res = await fetch(`${baseUrl}/api/study/sessions/${sessionId}`, { method: 'DELETE' })
+        const res = await apiFetch(`${baseUrl}/api/study/sessions/${sessionId}`, { method: 'DELETE' })
         return res.ok
       } catch {
         return false

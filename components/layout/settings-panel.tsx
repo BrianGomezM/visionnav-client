@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo } from 'react'
-import { RotateCcw, Lock, Settings2, Globe, Gauge, Mic2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { RotateCcw, Lock, Settings2, Globe, Gauge, Mic2, KeyRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { useTtsModels } from '@/hooks/use-tts-models'
+import { getResearcherKey, setResearcherKey } from '@/lib/api-client'
 
 interface SettingsPanelProps {
   isOpen: boolean
@@ -61,6 +62,12 @@ export function SettingsPanel({
   onReset,
 }: SettingsPanelProps) {
   const { models, defaultModel } = useTtsModels(baseUrl)
+
+  // Clave del investigador: solo en sessionStorage (ver lib/api-client.ts).
+  const [researcherKey, setResearcherKeyState] = useState('')
+  useEffect(() => {
+    setResearcherKeyState(getResearcherKey() ?? '')
+  }, [])
 
   // El modelo "por defecto" ya representa uno de los modelos de la lista —
   // se excluye de las opciones normales para no mostrarlo duplicado.
@@ -182,6 +189,30 @@ export function SettingsPanel({
               </Select>
               <p className="text-xs text-muted-foreground">
                 Cambia si agotas las 3 solicitudes/min gratuitas — cada modelo tiene cuota propia.
+              </p>
+            </div>
+          </SettingCard>
+
+          {/* Clave del investigador (X-API-Key) — nunca en variables NEXT_PUBLIC_* */}
+          <SettingCard icon={KeyRound} title="Clave del investigador">
+            <div className="space-y-1.5">
+              <Label htmlFor="researcher-key" className="sr-only">
+                Clave del investigador
+              </Label>
+              <Input
+                id="researcher-key"
+                type="password"
+                autoComplete="off"
+                value={researcherKey}
+                onChange={(e) => {
+                  setResearcherKeyState(e.target.value)
+                  setResearcherKey(e.target.value)
+                }}
+                placeholder="Sin clave (modo desarrollo)"
+                className="bg-background"
+              />
+              <p className="text-xs text-muted-foreground">
+                Se envía como X-API-Key. Solo se guarda en esta pestaña y se borra al cerrarla.
               </p>
             </div>
           </SettingCard>
