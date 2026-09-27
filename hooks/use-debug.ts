@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { apiFetch } from '@/lib/api-client'
+import { ApiRequestError, parseApiError } from '@/lib/api-errors'
 
 // Types matching the actual API response
 export interface BBox {
@@ -151,19 +152,20 @@ export function useDebug({ baseUrl, confidenceThreshold }: UseDebugOptions) {
       })
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.detail || `Error ${res.status}: ${res.statusText}`)
+        throw new ApiRequestError(await parseApiError(res))
       }
 
       const result: DebugResponse = await res.json()
       setData(result)
       return result
     } catch (err) {
-      const message = err instanceof Error 
-        ? err.message.includes('fetch') || err.message.includes('Failed')
-          ? 'No se pudo conectar con la API. Verifica que el servidor este corriendo.'
-          : err.message
-        : 'Error desconocido'
+      const message = err instanceof ApiRequestError
+        ? err.message                                   // mensaje del contrato + ID de solicitud
+        : err instanceof Error
+          ? err.message.includes('fetch') || err.message.includes('Failed')
+            ? 'No se pudo conectar con la API. Verifica que el servidor este corriendo.'
+            : err.message
+          : 'Error desconocido'
       setError(message)
       return null
     } finally {

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { ImageUploader } from '@/components/shared/image-uploader'
 import { ErrorCard } from '@/components/shared/error-card'
+import { DegradationNotice } from '@/components/shared/degradation-notice'
 import { ProgressBar } from '@/components/shared/progress-bar'
 import { NarrativeCard } from '@/components/detect/narrative-card'
 import { AudioSection } from '@/components/detect/audio-section'
@@ -138,6 +139,7 @@ export function DetectTab({ baseUrl, confidenceThreshold, ttsModel }: DetectTabP
 
         {data && !isLoading && (
           <>
+            <DegradationNotice codes={data.degradaciones} requestId={data.request_id} />
             <NarrativeCard narrative={data.narrativa_final} />
             <AnnotatedImageCard
               imagenAnotada={data.imagen_anotada}

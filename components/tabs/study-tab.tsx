@@ -33,6 +33,7 @@ import {
 } from '@/hooks/use-study'
 import { useCatalog, type StudyTest } from '@/hooks/use-catalog'
 import { cn } from '@/lib/utils'
+import { DegradationNotice } from '@/components/shared/degradation-notice'
 
 interface StudyTabProps {
   baseUrl: string
@@ -594,7 +595,12 @@ function TestRunner({
 
               {detectHook.data && (
                 <>
+                  <DegradationNotice codes={detectHook.data.degradaciones} requestId={detectHook.data.request_id} />
+                  {!detectHook.data.audio.disponible && (
+                    <ErrorCard message="No hay audio del sistema para este estímulo: no lo presente al participante. Reintente o registre la incidencia." />
+                  )}
                   <AudioSection
+                    allowBrowserSpeech={false}
                     audioAvailable={detectHook.data.audio.disponible}
                     audioBase64={detectHook.data.audio.data_base64}
                     contentType={detectHook.data.audio.content_type}

@@ -2,11 +2,14 @@
 
 import { useState, useCallback } from 'react'
 import { apiFetch } from '@/lib/api-client'
+import { ApiRequestError, parseApiError, parseDegradations } from '@/lib/api-errors'
 
 export type TtsUnavailableReason =
   | 'cuota_excedida'
   | 'error_sintesis'
   | 'tts_desactivado'
+  | 'tts_omitido_evaluacion'
+  | 'tiempo_agotado'
   | null
 
 export interface AudioInfo {
@@ -21,6 +24,10 @@ export interface AudioInfo {
 
 export interface DetectResponse {
   status: 'success' | 'error'
+  /** Cabecera X-Request-ID (para soporte). */
+  request_id?: string | null
+  /** Cabecera X-Degradacion: partes opcionales que no se generaron con el componente previsto. */
+  degradaciones?: string[]
   narrativa_final: string
   audio: AudioInfo
   /** Imagen con bounding boxes dibujados por detection_visualizer */
@@ -91,19 +98,23 @@ export function useDetect({ baseUrl, confidenceThreshold, ttsModel }: UseDetectO
       })
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.detail || `Error ${res.status}: ${res.statusText}`)
+        throw new ApiRequestError(await parseApiError(res))
       }
 
       const result: DetectResponse = await res.json()
+      // Trazabilidad y degradaciones declaradas por el backend (cabeceras)
+      result.request_id = res.headers.get('X-Request-ID')
+      result.degradaciones = parseDegradations(res)
       setData(result)
       return result
     } catch (err) {
-      const message = err instanceof Error 
-        ? err.message.includes('fetch') || err.message.includes('Failed')
-          ? 'No se pudo conectar con la API. Verifica que el servidor este corriendo.'
-          : err.message
-        : 'Error desconocido'
+      const message = err instanceof ApiRequestError
+        ? err.message                                   // mensaje del contrato + ID de solicitud
+        : err instanceof Error
+          ? err.message.includes('fetch') || err.message.includes('Failed')
+            ? 'No se pudo conectar con la API. Verifica que el servidor este corriendo.'
+            : err.message
+          : 'Error desconocido'
       setError(message)
       return null
     } finally {

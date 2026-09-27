@@ -9,6 +9,8 @@ const REASON_LABEL: Record<Exclude<TtsUnavailableReason, null>, string> = {
   cuota_excedida: 'Cuota de Google TTS agotada',
   error_sintesis: 'Falló la síntesis',
   tts_desactivado: 'TTS no configurado en el servidor',
+  tts_omitido_evaluacion: 'TTS desactivado en este entorno',
+  tiempo_agotado: 'El servicio de voz no respondió a tiempo',
 }
 
 interface AudioSectionProps {
@@ -17,9 +19,14 @@ interface AudioSectionProps {
   contentType?: string | null
   narrative: string
   ttsReason?: TtsUnavailableReason
+  /**
+   * Permite reproducir con la voz del navegador. En el estudio formal debe ser
+   * false: la voz del navegador es un estímulo DISTINTO del evaluado.
+   */
+  allowBrowserSpeech?: boolean
 }
 
-export function AudioSection({ audioAvailable, audioBase64, contentType, narrative, ttsReason }: AudioSectionProps) {
+export function AudioSection({ audioAvailable, audioBase64, contentType, narrative, ttsReason, allowBrowserSpeech = true }: AudioSectionProps) {
   const [isSpeaking, setIsSpeaking] = useState(false)
 
   // Create data URI from base64
@@ -86,6 +93,7 @@ export function AudioSection({ audioAvailable, audioBase64, contentType, narrati
       {/* Browser speech fallback */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
+          {allowBrowserSpeech && (<>
           <Button
             variant="outline"
             size="sm"
@@ -118,6 +126,7 @@ export function AudioSection({ audioAvailable, audioBase64, contentType, narrati
               Detener
             </Button>
           )}
+          </>)}
         </div>
 
         {/* Status badge */}
