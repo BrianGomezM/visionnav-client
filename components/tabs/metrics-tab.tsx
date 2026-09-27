@@ -8,7 +8,7 @@ import { LatencyChart } from '@/components/metrics/latency-chart'
 import { PercentileBar } from '@/components/metrics/percentile-bar'
 import { ScenarioDistribution } from '@/components/metrics/scenario-distribution'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { useMetricsSummary, useMetricsLatency, useMetricsSession } from '@/hooks/use-metrics'
+import { useMetricsSummary, useMetricsLatency } from '@/hooks/use-metrics'
 import { cn } from '@/lib/utils'
 
 /** Icono de ayuda con tooltip explicativo, para usar junto a etiquetas técnicas. */
@@ -77,22 +77,19 @@ function MetricCard({
  * Fuentes de datos:
  *   GET /api/metrics/summary  — métricas agregadas con percentiles
  *   GET /api/metrics/latency  — historial de latencias para el gráfico
- *   GET /api/metrics          — métricas de sesión en memoria
  */
 export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
   const summary = useMetricsSummary(baseUrl, isActive)
   const latency = useMetricsLatency(baseUrl, 100, isActive)
-  const session = useMetricsSession(baseUrl, isActive)
 
   const refreshAll = () => {
     summary.refresh()
     latency.refresh()
-    session.refresh()
   }
 
-  const isLoading = summary.isLoading || latency.isLoading || session.isLoading
-  const hasError = summary.error || latency.error || session.error
-  const hasData = !!summary.data || !!latency.data || !!session.data
+  const isLoading = summary.isLoading || latency.isLoading
+  const hasError = summary.error || latency.error
+  const hasData = !!summary.data || !!latency.data
 
   const maxMs =
     summary.data?.tiempo_total_ms?.max ??
@@ -131,7 +128,6 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
           message={
             summary.error ??
             latency.error ??
-            session.error ??
             'Error al cargar métricas'
           }
         />
@@ -297,62 +293,6 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
             Evolución de latencia — últimas {latency.data.count} solicitudes
           </h3>
           <LatencyChart data={latency.data.data} />
-        </div>
-      )}
-
-      {/* ── Métricas de sesión en memoria ── */}
-      {session.data && session.data.total_requests > 0 && (
-        <div className="rounded-xl border border-border bg-card p-5">
-          <h3 className="font-medium text-foreground mb-4">
-            Sesión actual (en memoria)
-          </h3>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-            <div className="p-3 rounded-lg bg-muted/40">
-              <p className="text-xs text-muted-foreground">Solicitudes sesión</p>
-              <p className="text-lg font-semibold text-foreground">{session.data.total_requests}</p>
-            </div>
-            {session.data.tiempos_promedio_ms && (
-              <>
-                <div className="p-3 rounded-lg bg-muted/40">
-                  <p className="text-xs text-muted-foreground">Tiempo promedio total</p>
-                  <p className="text-lg font-semibold text-foreground">
-                    {session.data.tiempos_promedio_ms.total.toFixed(0)} ms
-                  </p>
-                </div>
-                <div className="p-3 rounded-lg bg-muted/40">
-                  <p className="text-xs text-muted-foreground">LLM promedio</p>
-                  <p className="text-lg font-semibold text-foreground">
-                    {session.data.tiempos_promedio_ms.llm.toFixed(0)} ms
-                  </p>
-                </div>
-                <div className="p-3 rounded-lg bg-muted/40">
-                  <p className="text-xs text-muted-foreground">TTS promedio</p>
-                  <p className="text-lg font-semibold text-foreground">
-                    {session.data.tiempos_promedio_ms.tts.toFixed(0)} ms
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-
-          {session.data.tts && (
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[#E1F5EE] text-[#0F6E56]">
-                TTS exitoso: {session.data.tts.exitoso}
-              </span>
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[#FCEBEB] text-[#E24B4A]">
-                TTS fallido: {session.data.tts.fallido}
-              </span>
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">
-                Tasa éxito TTS: {session.data.tts.tasa_exito}
-              </span>
-              <HelpTip>
-                "Fallido" cuenta las veces que Gemini TTS no devolvió audio (por ejemplo, un
-                error temporal del servicio de Google): la narrativa igual se entrega en texto,
-                pero sin audio. No indica un error del detector ni de la narrativa.
-              </HelpTip>
-            </div>
-          )}
         </div>
       )}
 
