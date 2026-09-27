@@ -44,10 +44,12 @@ export function AnnotatedImageCard({ imagenAnotada, baseUrl }: AnnotatedImageCar
     : null
 
   const handleDownload = () => {
-    if (!imagenAnotada.data_uri || !imagenAnotada.archivo) return
+    // En el perfil production el backend no conserva el archivo (archivo = null):
+    // la descarga usa la imagen embebida (data_uri) con un nombre por defecto.
+    if (!imagenAnotada.data_uri) return
     const a = document.createElement('a')
     a.href = imagenAnotada.data_uri
-    a.download = imagenAnotada.archivo.split('/').pop() ?? 'detection.jpg'
+    a.download = imagenAnotada.archivo?.split('/').pop() ?? 'detection.jpg'
     a.click()
   }
 
