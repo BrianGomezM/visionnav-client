@@ -31,10 +31,31 @@ export function setResearcherKey(key: string | null): void {
   }
 }
 
-export function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+export interface ApiFetchInit extends RequestInit {
+  /** Tiempo máximo de espera (ms). Al vencer, la solicitud se aborta (ApiTimeoutError). */
+  timeoutMs?: number
+}
+
+export class ApiTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`El servidor no respondió en ${Math.round(ms / 1000)} s. Inténtelo de nuevo más tarde.`)
+  }
+}
+
+export async function apiFetch(input: string, init: ApiFetchInit = {}): Promise<Response> {
+  const { timeoutMs, ...rest } = init
+  const headers = new Headers(rest.headers)
   const key = getResearcherKey()
-  if (!key) return fetch(input, init)
-  const headers = new Headers(init.headers)
-  headers.set('X-API-Key', key)
-  return fetch(input, { ...init, headers })
+  if (key) headers.set('X-API-Key', key)
+  if (!timeoutMs) return fetch(input, { ...rest, headers })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(input, { ...rest, headers, signal: controller.signal })
+  } catch (err) {
+    if (controller.signal.aborted) throw new ApiTimeoutError(timeoutMs)
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
 }

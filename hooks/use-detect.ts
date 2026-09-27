@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { apiFetch } from '@/lib/api-client'
+import { apiFetch, ApiTimeoutError } from '@/lib/api-client'
+
+export const DETECT_TIMEOUT_MS = 180_000
 import { ApiRequestError, parseApiError, parseDegradations } from '@/lib/api-errors'
 
 export type TtsUnavailableReason =
@@ -10,6 +12,8 @@ export type TtsUnavailableReason =
   | 'tts_desactivado'
   | 'tts_omitido_evaluacion'
   | 'tiempo_agotado'
+  | 'limite_proveedor'
+  | 'proveedor_no_disponible'
   | null
 
 export interface AudioInfo {
@@ -92,9 +96,12 @@ export function useDetect({ baseUrl, confidenceThreshold, ttsModel }: UseDetectO
         form.append('tts_model', ttsModel)
       }
 
+      // Peor caso normal del backend ≈ 2 min (LLM con reintentos + TTS 60 s);
+      // por debajo del límite del proxy de Azure (~230 s).
       const res = await apiFetch(`${baseUrl}/api/detect`, {
         method: 'POST',
         body: form,
+        timeoutMs: DETECT_TIMEOUT_MS,
       })
 
       if (!res.ok) {
@@ -108,8 +115,8 @@ export function useDetect({ baseUrl, confidenceThreshold, ttsModel }: UseDetectO
       setData(result)
       return result
     } catch (err) {
-      const message = err instanceof ApiRequestError
-        ? err.message                                   // mensaje del contrato + ID de solicitud
+      const message = err instanceof ApiRequestError || err instanceof ApiTimeoutError
+        ? err.message                                   // mensaje del contrato + ID de solicitud / timeout
         : err instanceof Error
           ? err.message.includes('fetch') || err.message.includes('Failed')
             ? 'No se pudo conectar con la API. Verifica que el servidor este corriendo.'

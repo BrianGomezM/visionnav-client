@@ -11,6 +11,8 @@ const REASON_LABEL: Record<Exclude<TtsUnavailableReason, null>, string> = {
   tts_desactivado: 'TTS no configurado en el servidor',
   tts_omitido_evaluacion: 'TTS desactivado en este entorno',
   tiempo_agotado: 'El servicio de voz no respondió a tiempo',
+  limite_proveedor: 'El servicio de voz limitó las solicitudes',
+  proveedor_no_disponible: 'El servicio de voz no está disponible temporalmente',
 }
 
 interface AudioSectionProps {
