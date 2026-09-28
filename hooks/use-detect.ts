@@ -72,7 +72,12 @@ export interface DetectResponse {
 
 interface UseDetectOptions {
   baseUrl: string
-  confidenceThreshold: number
+  /**
+   * Umbral enviado al backend. null = no enviarlo: el servidor aplica su valor por
+   * defecto, que es el congelado (0.35). El estudio usa null para que un cambio en
+   * Ajustes no altere la configuración experimental.
+   */
+  confidenceThreshold: number | null
   /** ID de modelo Gemini TTS a usar, o null para el TTS_MODEL por defecto del servidor. */
   ttsModel?: string | null
 }
@@ -90,7 +95,7 @@ export function useDetect({ baseUrl, confidenceThreshold, ttsModel }: UseDetectO
     try {
       const form = new FormData()
       form.append('file', file)
-      form.append('confidence_threshold', confidenceThreshold.toString())
+      if (confidenceThreshold !== null) form.append('confidence_threshold', confidenceThreshold.toString())
       form.append('debug', 'false')
       if (ttsModel) {
         form.append('tts_model', ttsModel)

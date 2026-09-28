@@ -1,6 +1,6 @@
 'use client'
 
-import { RefreshCw, BarChart2, Clock, Package, AlertCircle, Info, HelpCircle } from 'lucide-react'
+import { RefreshCw, BarChart2, Clock, Package, AlertCircle, Info, HelpCircle, KeyRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorCard } from '@/components/shared/error-card'
@@ -90,6 +90,8 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
   const isLoading = summary.isLoading || latency.isLoading
   const hasError = summary.error || latency.error
   const hasData = !!summary.data || !!latency.data
+  // Sin clave (study/production) no se consulta; con clave rechazada, se pide corregirla.
+  const keyProblem = summary.needsKey || summary.unauthorized || latency.unauthorized
 
   const maxMs =
     summary.data?.tiempo_total_ms?.max ??
@@ -114,13 +116,30 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
           variant="outline"
           size="sm"
           onClick={refreshAll}
-          disabled={isLoading}
+          disabled={isLoading || summary.needsKey}
           className="gap-2 shrink-0"
         >
           <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
           Actualizar
         </Button>
       </div>
+
+      {/* Clave del investigador */}
+      {keyProblem && (
+        <div
+          role="status"
+          className="flex items-start gap-3 p-4 rounded-xl border border-[#B54708]/40 bg-[#FFFAEB] text-sm text-[#7A2E0E]"
+        >
+          <KeyRound className="w-5 h-5 shrink-0 mt-0.5" aria-hidden="true" />
+          <span>
+            {summary.needsKey
+              ? 'Las métricas requieren la clave del investigador.'
+              : 'El servidor rechazó la clave del investigador.'}{' '}
+            Introdúzcala en <strong>Ajustes → Clave del investigador</strong>; las métricas se
+            consultarán de nuevo automáticamente.
+          </span>
+        </div>
+      )}
 
       {/* Error */}
       {hasError && (

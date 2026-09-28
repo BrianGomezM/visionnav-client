@@ -6,11 +6,13 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { ImageUploader } from '@/components/shared/image-uploader'
 import { ErrorCard } from '@/components/shared/error-card'
+import { DevOnlyNotice } from '@/components/shared/dev-only-notice'
 import { ProgressBar } from '@/components/shared/progress-bar'
 import { AnnotatedImageCard } from '@/components/detect/annotated-image-card'
 import { PipelineStep } from '@/components/debug/pipeline-step'
 import { ZoneBar } from '@/components/debug/zone-bar'
 import { useDebug } from '@/hooks/use-debug'
+import { useDevEndpoints } from '@/hooks/use-backend-profile'
 import { cn } from '@/lib/utils'
 
 const LOADING_MESSAGES = [
@@ -34,6 +36,8 @@ export function DebugTab({ baseUrl, confidenceThreshold }: DebugTabProps) {
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0)
 
   const { data, isLoading, error, debug, reset } = useDebug({ baseUrl, confidenceThreshold })
+  // POST /api/debug-detect solo existe con APP_PROFILE=development (perfil leído de /api/health).
+  const dev = useDevEndpoints(baseUrl)
 
   // Cycle through pipeline step messages for better perceived performance
   useEffect(() => {
@@ -59,9 +63,9 @@ export function DebugTab({ baseUrl, confidenceThreshold }: DebugTabProps) {
   }, [previewUrl, reset])
 
   const handleSubmit = useCallback(async () => {
-    if (!selectedFile) return
+    if (!selectedFile || dev.state !== 'available') return
     await debug(selectedFile)
-  }, [selectedFile, debug])
+  }, [selectedFile, debug, dev.state])
 
   const getConfidenceBar = (confidence: number) => {
     const pct = confidence * 100
@@ -92,6 +96,26 @@ export function DebugTab({ baseUrl, confidenceThreshold }: DebugTabProps) {
       default:
         return <ArrowRight className="w-5 h-5 text-muted-foreground" />
     }
+  }
+
+  if (dev.state !== 'available') {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6 shadow-sm space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground mb-1">Diagnóstico del pipeline</h2>
+          <p className="text-sm text-muted-foreground">
+            Analiza paso a paso el proceso de detección y generación de narrativa.
+          </p>
+        </div>
+        <DevOnlyNotice
+          feature="El diagnóstico detallado del pipeline"
+          endpoints={['POST /api/debug-detect']}
+          state={dev.state}
+          profile={dev.profile}
+          onRetry={dev.refresh}
+        />
+      </div>
+    )
   }
 
   return (

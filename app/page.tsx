@@ -126,11 +126,7 @@ export default function VisionNavApp() {
           aria-labelledby="study-tab"
           hidden={activeTab !== 'study'}
         >
-          <StudyTab
-            baseUrl={config.baseUrl}
-            confidenceThreshold={config.confidenceThreshold}
-            isActive={activeTab === 'study'}
-          />
+          <StudyTab baseUrl={config.baseUrl} isActive={activeTab === 'study'} />
         </div>
       </main>
 

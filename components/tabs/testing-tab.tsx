@@ -14,6 +14,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorCard } from '@/components/shared/error-card'
+import { DevOnlyNotice } from '@/components/shared/dev-only-notice'
+import { useDevEndpoints } from '@/hooks/use-backend-profile'
 import { FunctionalCaseRow } from '@/components/testing/functional-case-row'
 import { LoadStatsGrid } from '@/components/testing/load-stats-grid'
 import {
@@ -40,16 +42,38 @@ type Panel = 'functional' | 'load'
  *   POST /api/test/functional — suite de 7 casos automatizados
  *   POST /api/test/load       — prueba de carga configurable
  *   GET  /api/test/results    — historial de resultados
+ *
+ * Esos endpoints solo existen con APP_PROFILE=development: en study/production
+ * (perfil leído de /api/health) no se consultan y la pestaña lo indica.
  */
 export function TestingTab({ baseUrl, isActive }: TestingTabProps) {
   const [panel, setPanel] = useState<Panel>('functional')
 
+  const dev = useDevEndpoints(baseUrl)
   const functional = useFunctionalTests(baseUrl)
   const loadTest = useLoadTest(baseUrl)
-  const history = useTestResults(baseUrl, isActive)
+  const history = useTestResults(baseUrl, isActive && dev.state === 'available')
 
   const [nRequests, setNRequests] = useState(10)
   const [concurrency, setConcurrency] = useState(3)
+
+  if (dev.state !== 'available') {
+    return (
+      <div className="space-y-6">
+        <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+          <FlaskConical className="w-5 h-5 text-[#7F77DD]" />
+          Suite de pruebas
+        </h2>
+        <DevOnlyNotice
+          feature="Las pruebas técnicas internas (funcionales y de carga)"
+          endpoints={['/api/test/*']}
+          state={dev.state}
+          profile={dev.profile}
+          onRetry={dev.refresh}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

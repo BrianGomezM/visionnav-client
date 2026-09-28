@@ -3,6 +3,8 @@
 import { useState, useCallback } from 'react'
 import useSWR from 'swr'
 import { apiFetch } from '@/lib/api-client'
+import { ApiRequestError, parseApiError } from '@/lib/api-errors'
+import { useResearcherAccess } from '@/hooks/use-backend-profile'
 
 // ─────────────────────────────────────────────
 // TIPOS — /api/metrics/summary
@@ -52,18 +54,24 @@ export interface MetricsLatency {
 // ─────────────────────────────────────────────
 // FETCHER GENÉRICO
 // ─────────────────────────────────────────────
-const fetcher = async (url: string) => {
+// La clave de SWR es [url, versión de la clave del investigador]: al guardar la
+// clave cambia la versión y se vuelve a consultar, descartando un 401 previo.
+// Rutas del investigador: requieren X-API-Key (apiFetch) en study/production.
+const fetcher = async ([url]: readonly [string, number]) => {
   const res = await apiFetch(url)
-  if (!res.ok) throw new Error(`Error ${res.status}: ${res.statusText}`)
+  if (!res.ok) throw new ApiRequestError(await parseApiError(res))
   return res.json()
 }
+
+const isUnauthorized = (err: unknown) => err instanceof ApiRequestError && err.info.status === 401
 
 // ─────────────────────────────────────────────
 // HOOK — Resumen de métricas de producción
 // ─────────────────────────────────────────────
 export function useMetricsSummary(baseUrl: string, enabled = true) {
+  const { version, canQuery, needsKey } = useResearcherAccess(baseUrl)
   const { data, error, isLoading, mutate } = useSWR<MetricsSummary>(
-    enabled ? `${baseUrl}/api/metrics/summary` : null,
+    enabled && canQuery ? [`${baseUrl}/api/metrics/summary`, version] : null,
     fetcher,
     { revalidateOnFocus: false, shouldRetryOnError: false }
   )
@@ -71,6 +79,8 @@ export function useMetricsSummary(baseUrl: string, enabled = true) {
     data: data ?? null,
     isLoading,
     error: error?.message ?? null,
+    needsKey,
+    unauthorized: isUnauthorized(error),
     refresh: () => mutate(),
   }
 }
@@ -79,8 +89,9 @@ export function useMetricsSummary(baseUrl: string, enabled = true) {
 // HOOK — Historial de latencias
 // ─────────────────────────────────────────────
 export function useMetricsLatency(baseUrl: string, limit = 100, enabled = true) {
+  const { version, canQuery, needsKey } = useResearcherAccess(baseUrl)
   const { data, error, isLoading, mutate } = useSWR<MetricsLatency>(
-    enabled ? `${baseUrl}/api/metrics/latency?limit=${limit}` : null,
+    enabled && canQuery ? [`${baseUrl}/api/metrics/latency?limit=${limit}`, version] : null,
     fetcher,
     { revalidateOnFocus: false, shouldRetryOnError: false }
   )
@@ -88,6 +99,8 @@ export function useMetricsLatency(baseUrl: string, limit = 100, enabled = true) 
     data: data ?? null,
     isLoading,
     error: error?.message ?? null,
+    needsKey,
+    unauthorized: isUnauthorized(error),
     refresh: () => mutate(),
   }
 }

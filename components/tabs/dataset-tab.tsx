@@ -16,7 +16,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorCard } from '@/components/shared/error-card'
+import { DevOnlyNotice } from '@/components/shared/dev-only-notice'
 import { ImageUploader } from '@/components/shared/image-uploader'
+import { useDevEndpoints } from '@/hooks/use-backend-profile'
 import {
   useDatasetStats,
   useFinetuneStatus,
@@ -52,10 +54,15 @@ const SCENE_TYPES = [
  *   GET  /api/dataset/stats     — estadísticas del dataset
  *   POST /api/finetune/prepare  — preparar dataset en formato YOLO
  *   GET  /api/finetune/status   — estado del fine-tuning
+ *
+ * Esos endpoints solo existen con APP_PROFILE=development: en study/production
+ * (perfil leído de /api/health) no se consultan y el módulo lo indica.
  */
 export function DatasetTab({ baseUrl, isActive }: DatasetTabProps) {
-  const stats = useDatasetStats(baseUrl, isActive)
-  const ftStatus = useFinetuneStatus(baseUrl, isActive)
+  const dev = useDevEndpoints(baseUrl)
+  const available = dev.state === 'available'
+  const stats = useDatasetStats(baseUrl, isActive && available)
+  const ftStatus = useFinetuneStatus(baseUrl, isActive && available)
   const uploadHook = useDatasetUpload(baseUrl)
   const prepareHook = useFinetunePrepare(baseUrl)
 
@@ -100,8 +107,8 @@ export function DatasetTab({ baseUrl, isActive }: DatasetTabProps) {
     })
   }
 
-  return (
-    <div className="space-y-6">
+  const intro = (
+    <>
       {/* Cabecera */}
       <div>
         <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
@@ -127,6 +134,27 @@ export function DatasetTab({ baseUrl, isActive }: DatasetTabProps) {
           </p>
         </div>
       </div>
+    </>
+  )
+
+  if (dev.state !== 'available') {
+    return (
+      <div className="space-y-6">
+        {intro}
+        <DevOnlyNotice
+          feature="El módulo de dataset y fine-tuning (trabajo futuro)"
+          endpoints={['/api/dataset/*', '/api/finetune/*']}
+          state={dev.state}
+          profile={dev.profile}
+          onRetry={dev.refresh}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {intro}
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* ── Panel izquierdo: Subir imagen ── */}

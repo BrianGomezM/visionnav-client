@@ -6,6 +6,8 @@ import { apiFetch } from '@/lib/api-client'
 export interface HealthResponse {
   status: 'healthy' | 'unhealthy'
   version: string
+  /** APP_PROFILE del backend. Ausente en versiones anteriores a los perfiles. */
+  perfil?: 'development' | 'study' | 'production'
   modelo: {
     nombre: string
     weights: string

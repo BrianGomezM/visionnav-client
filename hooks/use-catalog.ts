@@ -2,29 +2,18 @@
 
 import useSWR from 'swr'
 import { apiFetch } from '@/lib/api-client'
+import { ApiRequestError, parseApiError } from '@/lib/api-errors'
+import { useResearcherAccess } from '@/hooks/use-backend-profile'
 
 /**
- * Catálogo único de pruebas (GET /api/catalog). Sustituye a lib/study-tests.ts:
- * las pruebas ya no se definen en el cliente sino en el backend
- * (app/catalog/catalog.yaml). La respuesta nunca incluye ground truth.
+ * Catálogo único de pruebas (GET /api/catalog), definido en el backend
+ * (app/catalog/catalog.yaml). El cliente NO duplica el catálogo. La respuesta
+ * nunca incluye ground truth.
  */
 
 export type StudyTrack = 'objetivo' | 'piloto'
 export type TestKind = 'imagen' | 'escala' | 'ruta' | 'texto'
-
-/** Forma que usa la pestaña de estudio (idéntica a la del antiguo lib/study-tests.ts). */
-export interface StudyTest {
-  id: string
-  nombre: string
-  objetivo: string
-  /** Instrucción exacta que el investigador debe leer/seguir, para no improvisar entre participantes. */
-  guionInvestigador: string
-  tipo: TestKind
-  /** Para tipo 'escala': criterios individuales a calificar 1-5. */
-  criterios?: string[]
-  /** Métrica(s) que esta prueba alimenta, para trazabilidad con el Capítulo 5. */
-  metricas: string[]
-}
+export type EstadoEstimulos = 'por_definir' | 'no_requiere' | 'definido'
 
 export interface CatalogUserTest {
   test_id: string
@@ -38,8 +27,24 @@ export interface CatalogUserTest {
   metricas: string[]
   metricas_texto: string[]
   tipo_evaluacion: string
-  estimulos: string | string[] | null
+  /** "POR_DEFINIR", null (no usa estímulo) o lista de stimulus_id. */
+  estimulos: 'POR_DEFINIR' | string[] | null
+  estado_estimulos: EstadoEstimulos
+  requiere_estimulo: boolean
+  ejecutable_formal: boolean
   disponibilidad: { investigador: boolean; participante: boolean }
+  /** Tarea de decisión (app/catalog/decisiones.yaml). Nunca incluye la alternativa esperada. */
+  decision?: DecisionDefinition | null
+}
+
+export interface DecisionDefinition {
+  pregunta: string
+  alternativas: { id: string; texto: string }[]
+  estado_esperadas: 'definido' | 'por_definir'
+  /** Estímulos con alternativa esperada definida (el valor queda en el servidor). */
+  esperada_definida_para: string[]
+  /** Solo para sesiones de prueba técnica (PTEST) en modo ensayo. */
+  fixtures_tecnicos: { id: string; stimulus_id: string }[]
 }
 
 export interface CatalogTechnicalTest {
@@ -73,38 +78,25 @@ export interface Catalog {
   pruebas_usuario: CatalogUserTest[]
 }
 
-const fetcher = async (url: string): Promise<Catalog> => {
+const fetcher = async ([url]: readonly [string, number]): Promise<Catalog> => {
   const res = await apiFetch(url)
-  if (res.status === 401) throw new Error('Se requiere la clave del investigador (ajustes).')
-  if (!res.ok) throw new Error(`Error ${res.status}: ${res.statusText}`)
+  if (!res.ok) throw new ApiRequestError(await parseApiError(res))
   return res.json()
 }
 
-export function toStudyTest(t: CatalogUserTest): StudyTest {
-  return {
-    id: t.id,
-    nombre: t.nombre,
-    objetivo: t.objetivo,
-    guionInvestigador: t.guion_investigador,
-    tipo: t.tipo,
-    criterios: t.criterios ?? undefined,
-    metricas: t.metricas_texto,
-  }
-}
-
-export function useCatalog(baseUrl: string) {
-  const { data, error, isLoading, mutate } = useSWR<Catalog>(`${baseUrl}/api/catalog`, fetcher, {
-    revalidateOnFocus: false,
-  })
-
-  const testsForTrack = (track: StudyTrack): StudyTest[] =>
-    (data?.pruebas_usuario ?? []).filter((t) => t.pista === track).map(toStudyTest)
+// En study/production no se consulta sin clave (useResearcherAccess): sin 401 al cargar.
+export function useCatalog(baseUrl: string, enabled = true) {
+  const { version, canQuery } = useResearcherAccess(baseUrl)
+  const { data, error, isLoading, mutate } = useSWR<Catalog>(
+    enabled && canQuery ? [`${baseUrl}/api/catalog`, version] : null,
+    fetcher,
+    { revalidateOnFocus: false, shouldRetryOnError: false }
+  )
 
   return {
     catalog: data ?? null,
     error: error instanceof Error ? error.message : error ? String(error) : null,
     isLoading,
     refresh: mutate,
-    testsForTrack,
   }
 }

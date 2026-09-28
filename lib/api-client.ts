@@ -11,6 +11,8 @@
  */
 
 const KEY_STORAGE = 'visionnav-researcher-key'
+/** Evento de ventana emitido al cambiar la clave: las consultas SWR se revalidan. */
+export const KEY_CHANGE_EVENT = 'visionnav-researcher-key-change'
 
 export function getResearcherKey(): string | null {
   if (typeof window === 'undefined') return null
@@ -29,6 +31,7 @@ export function setResearcherKey(key: string | null): void {
   } catch {
     // sessionStorage no disponible: la app sigue funcionando sin clave
   }
+  window.dispatchEvent(new Event(KEY_CHANGE_EVENT))
 }
 
 export interface ApiFetchInit extends RequestInit {
