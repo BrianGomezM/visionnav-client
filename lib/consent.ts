@@ -30,8 +30,6 @@ export interface ConsentDocument {
   original_v03: string
   afirmaciones: Record<ConsentKey, string>
   bloques: ConsentBlock[]
-  /** El acta incluye firma de testigo (documento de personas con ceguera total). */
-  testigo?: boolean
 }
 
 /** Datos del acta (§13). El nombre SOLO se usa para imprimir: nunca se envía al servidor. */
@@ -387,7 +385,6 @@ const OBJETIVO: ConsentDocument = {
     afirmacionesLista(AFIRMACIONES_OBJETIVO),
     ...REGISTRO,
   ],
-  testigo: true,
 }
 
 export const CONSENT_DOCUMENTS: Record<TipoParticipante, ConsentDocument> = { piloto: PILOTO, objetivo: OBJETIVO }

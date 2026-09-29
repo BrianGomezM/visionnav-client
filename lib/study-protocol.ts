@@ -181,6 +181,8 @@ export interface Ejecucion {
   escenario: string | null
   degradaciones: string[]
   umbral_confianza: number | null
+  /** Voz TTS que generó el audio (id del modelo o voz). */
+  tts_modelo?: string | null
   audio: { disponible: boolean; content_type: string | null; sha256: string | null; tamano_bytes: number | null }
 }
 

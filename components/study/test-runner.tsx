@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, ImageIcon, Info, Plus, ScanSearch, Timer, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, ImageIcon, Plus, ScanSearch, Timer, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorCard } from '@/components/shared/error-card'
@@ -39,6 +39,13 @@ const FUENTE_ESPERADA: Record<string, string> = {
   no_definida: 'no definida',
 }
 
+/**
+ * Voz del estudio (decisión del investigador del 2026-09-29): Azure Speech, Salomé (es-CO).
+ * ~0,3–0,6 s de síntesis en Azure frente a ~12,6 s de Gemini. Si el servidor no tiene Azure
+ * configurado, el backend usa la voz por defecto; la voz usada queda en la respuesta.
+ */
+export const STUDY_TTS_MODEL = 'azure:es-CO-SalomeNeural'
+
 const secs = (ms: number | null | undefined) => (ms === null || ms === undefined ? '—' : `${(ms / 1000).toFixed(1)} s`)
 
 type StepId = 'audio' | 'respuesta' | 'notas'
@@ -75,7 +82,7 @@ export function TestRunner({
   const [modo, setModo] = useState<ModoRegistro | null>(rule.formal ? 'formal' : rule.ensayo ? 'ensayo' : null)
   const actions = useStudyActions(baseUrl)
   // Umbral null: el servidor aplica el congelado (0.35), no el de Ajustes.
-  const detect = useDetect({ baseUrl, confidenceThreshold: null })
+  const detect = useDetect({ baseUrl, confidenceThreshold: null, ttsModel: STUDY_TTS_MODEL })
 
   const steps: StepId[] = test.requiere_estimulo ? ['audio', 'respuesta', 'notas'] : ['respuesta', 'notas']
   const [step, setStep] = useState(0)
@@ -230,6 +237,7 @@ export function TestRunner({
               escenario: data.escenario?.tipo ?? null,
               degradaciones: data.degradaciones ?? [],
               umbral_confianza: data.metricas?.umbral_confianza ?? null,
+              tts_modelo: data.metricas?.tts_modelo ?? STUDY_TTS_MODEL,
               audio: {
                 disponible: data.audio.disponible,
                 content_type: data.audio.content_type ?? null,
@@ -333,13 +341,6 @@ export function TestRunner({
           <TestInfo test={test} rule={rule} done={false} />
         </div>
 
-        <div className="flex gap-2 p-3 rounded-lg bg-[#EEEDFE] text-[#2E2A6B] text-sm">
-          <Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
-          <p>
-            <strong>Guion del investigador:</strong> {test.guion_investigador}
-            <FieldInfo help={FIELD_HELP.guion} />
-          </p>
-        </div>
 
         {rule.motivo && (
           <div role="note" className="flex gap-2 p-3 rounded-lg bg-[#FFFAEB] border border-[#B54708]/30 text-[#7A2E0E] text-sm">

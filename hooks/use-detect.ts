@@ -69,6 +69,8 @@ export interface DetectResponse {
     visualizer_ms?: number
     total_ms: number
     tts_ms?: number
+    /** Voz que generó el audio (id del selector). */
+    tts_modelo?: string
     objetos_detectados: number
     confianza_prom?: number
     umbral_confianza: number

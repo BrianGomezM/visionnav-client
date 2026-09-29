@@ -244,10 +244,13 @@ await check('acta (§13): documento completo con la tabla diligenciada y firmas'
     participar: true, grabacion: true, usoAcademico: true }
   const html = consentPrint.consentHtml(consent.CONSENT_DOCUMENTS.objetivo, acta)
   for (const s of ['Nombre De Prueba', 'PTEST01', 'Cali, 29 de septiembre de 2026', 'Sí ☒', 'Firma del investigador responsable',
-    'Firma de testigo', 'CI-VisionNav-Objetivo v0.4', '12. Consentimiento verbal', 'leído en voz alta'])
+    '12. Consentimiento verbal', 'leído en voz alta', 'logo-univalle.png', 'TRABAJO DE GRADO II',
+    'Consentimiento informado – VisionNav – Trabajo de Grado II', 'Programa de Ingeniería de Sistemas'])
     assert.ok(html.includes(s), s)
+  // Sin firma de testigo en ningún documento (decisión del investigador).
+  for (const d of Object.values(consent.CONSENT_DOCUMENTS)) assert.ok(!consentPrint.consentHtml(d, acta).includes('testigo'))
   const blank = consentPrint.consentHtml(consent.CONSENT_DOCUMENTS.piloto, null)
-  assert.ok(!blank.includes('☒') && !blank.includes('Firma de testigo') && blank.includes('Sí ☐'))
+  assert.ok(!blank.includes('☒') && blank.includes('Sí ☐'))
   assert.ok(consentPrint.consentHtml(consent.CONSENT_DOCUMENTS.piloto, { ...acta, nombre: '<b>x</b>' }).includes('&lt;b&gt;x'))
 })
 await check('narrativa: objetos con su ubicación y relaciones (sugerencias para codificar)', () => {
