@@ -447,9 +447,9 @@ export function SessionWizard({
             <Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
             <ol className="list-decimal pl-4 space-y-0.5">
               <li>Pida permiso verbal para grabar la lectura del consentimiento.</li>
-              <li>Pulse «Grabar lectura del consentimiento» y lea el texto completo en voz alta.</li>
-              <li>Lea cada afirmación del §12 y registre abajo la respuesta del participante.</li>
-              <li>Detenga la grabación y complete abajo los datos del acta (§13). No pida el nombre en voz alta mientras graba.</li>
+              <li>Pulse "Grabar lectura del consentimiento" y lea el texto completo en voz alta.</li>
+              <li>Lea cada afirmación y registre abajo la respuesta del participante.</li>
+              <li>Detenga la grabación y complete abajo los datos del acta. No pida el nombre en voz alta mientras graba.</li>
               <li>Imprima o guarde el acta en PDF y fírmela.</li>
             </ol>
           </div>
