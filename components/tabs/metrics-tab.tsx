@@ -124,7 +124,7 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
         </Button>
       </div>
 
-      {/* Clave del investigador */}
+      {/* Clave */}
       {keyProblem && (
         <div
           role="status"
@@ -133,9 +133,9 @@ export function MetricsTab({ baseUrl, isActive }: MetricsTabProps) {
           <KeyRound className="w-5 h-5 shrink-0 mt-0.5" aria-hidden="true" />
           <span>
             {summary.needsKey
-              ? 'Las métricas requieren la clave del investigador.'
-              : 'El servidor rechazó la clave del investigador.'}{' '}
-            Introdúzcala en <strong>Ajustes → Clave del investigador</strong>; las métricas se
+              ? 'Las métricas requieren la clave.'
+              : 'El servidor rechazó la clave.'}{' '}
+            Introdúzcala en <strong>Ajustes → Clave</strong>; las métricas se
             consultarán de nuevo automáticamente.
           </span>
         </div>

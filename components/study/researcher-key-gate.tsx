@@ -22,12 +22,8 @@ export function ResearcherKeyGate() {
     >
       <h3 id={`${id}-title`} className="font-medium flex items-center gap-2">
         <KeyRound className="w-4 h-4" aria-hidden="true" />
-        Se requiere la clave del investigador
+        Se requiere la clave
       </h3>
-      <p className="text-sm">
-        El servidor protege los datos de las sesiones. Introduzca la clave del investigador: se enviará como
-        cabecera X-API-Key y solo se conserva en esta pestaña del navegador.
-      </p>
       <form
         className="flex flex-wrap gap-2 items-end"
         onSubmit={(e) => {
@@ -40,7 +36,7 @@ export function ResearcherKeyGate() {
       >
         <div className="flex-1 min-w-56">
           <label htmlFor={`${id}-key`} className="text-sm font-medium block mb-1">
-            Clave del investigador
+            Clave
           </label>
           <input
             id={`${id}-key`}
