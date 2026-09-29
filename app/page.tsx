@@ -10,6 +10,7 @@ import { MetricsTab } from '@/components/tabs/metrics-tab'
 import { DatasetTab } from '@/components/tabs/dataset-tab'
 import { StudyTab } from '@/components/tabs/study-tab'
 import { useApiConfig } from '@/hooks/use-api-config'
+import { KeyGated } from '@/components/shared/key-gated'
 import { useBackendProfile } from '@/hooks/use-backend-profile'
 
 export default function VisionNavApp() {
@@ -68,11 +69,13 @@ export default function VisionNavApp() {
           aria-labelledby="detect-tab"
           hidden={activeTab !== 'detect'}
         >
-          <DetectTab
-            baseUrl={config.baseUrl}
-            confidenceThreshold={config.confidenceThreshold}
-            ttsModel={config.ttsModel}
-          />
+          <KeyGated baseUrl={config.baseUrl}>
+            <DetectTab
+              baseUrl={config.baseUrl}
+              confidenceThreshold={config.confidenceThreshold}
+              ttsModel={config.ttsModel}
+            />
+          </KeyGated>
         </div>
 
         {/* Pipeline / Debug — POST /api/debug-detect */}
@@ -95,10 +98,12 @@ export default function VisionNavApp() {
           aria-labelledby="health-tab"
           hidden={activeTab !== 'health'}
         >
-          <HealthTab
-            baseUrl={config.baseUrl}
-            isActive={activeTab === 'health'}
-          />
+          <KeyGated baseUrl={config.baseUrl}>
+            <HealthTab
+              baseUrl={config.baseUrl}
+              isActive={activeTab === 'health'}
+            />
+          </KeyGated>
         </div>
 
         {/* Métricas — GET /api/metrics/summary, /api/metrics/latency, /api/metrics */}

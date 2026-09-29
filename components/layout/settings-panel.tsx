@@ -63,7 +63,7 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
   const { models, defaultModel } = useTtsModels(baseUrl)
 
-  // Clave del investigador: solo en sessionStorage (ver lib/api-client.ts).
+  // Clave: solo en sessionStorage (ver lib/api-client.ts).
   const [researcherKey, setResearcherKeyState] = useState('')
   useEffect(() => {
     setResearcherKeyState(getResearcherKey() ?? '')
@@ -160,6 +160,11 @@ export function SettingsPanel({
                 <span>0.10 · más detecciones</span>
                 <span>0.90 · más estricto</span>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Es un <strong>máximo</strong>: cada clase tiene su propio mínimo (silla, persona y sofá 0,30; mesa y
+                puerta 0,15…) para no omitir obstáculos. Este valor puede bajar el de una clase, pero no subirlo. En
+                Detectar se muestra el umbral aplicado a cada objeto. El estudio usa siempre 0,35.
+              </p>
             </div>
           </SettingCard>
 
@@ -194,11 +199,11 @@ export function SettingsPanel({
             </div>
           </SettingCard>
 
-          {/* Clave del investigador (X-API-Key) — nunca en variables NEXT_PUBLIC_* */}
-          <SettingCard icon={KeyRound} title="Clave del investigador">
+          {/* Clave (X-API-Key) — nunca en variables NEXT_PUBLIC_* */}
+          <SettingCard icon={KeyRound} title="Clave">
             <div className="space-y-1.5">
               <Label htmlFor="researcher-key" className="sr-only">
-                Clave del investigador
+                Clave
               </Label>
               <Input
                 id="researcher-key"

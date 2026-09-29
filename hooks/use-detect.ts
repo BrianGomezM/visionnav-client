@@ -26,7 +26,16 @@ export interface AudioInfo {
   tamano_bytes?: number | null
 }
 
+export interface UmbralInfo {
+  umbral_ajustes: number
+  piso: number
+  regla: string
+  objetos: { objeto: string; clase: string; confianza: number; minimo_clase: number | null; umbral_efectivo: number }[]
+}
+
 export interface DetectResponse {
+  /** Umbral efectivo por objeto (informativo; backends anteriores no lo envían). */
+  umbral?: UmbralInfo
   status: 'success' | 'error'
   /** Cabecera X-Request-ID (para soporte). */
   request_id?: string | null

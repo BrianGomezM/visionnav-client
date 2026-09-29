@@ -11,6 +11,7 @@ import { ProgressBar } from '@/components/shared/progress-bar'
 import { NarrativeCard } from '@/components/detect/narrative-card'
 import { AudioSection } from '@/components/detect/audio-section'
 import { SceneMetrics } from '@/components/detect/scene-metrics'
+import { ObjectThresholds } from '@/components/detect/object-thresholds'
 import { AnnotatedImageCard } from '@/components/detect/annotated-image-card'
 import { useDetect } from '@/hooks/use-detect'
 
@@ -156,6 +157,7 @@ export function DetectTab({ baseUrl, confidenceThreshold, ttsModel }: DetectTabP
               escenario={data.escenario}
               metricas={data.metricas}
             />
+            {data.umbral && <ObjectThresholds umbral={data.umbral} />}
           </>
         )}
       </div>
