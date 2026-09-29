@@ -164,10 +164,10 @@ export function SettingsPanel({
           </SettingCard>
 
           {/* TTS model (cada modelo tiene su propia cuota RPM en el nivel gratuito) */}
-          <SettingCard icon={Mic2} title="Modelo Gemini TTS">
+          <SettingCard icon={Mic2} title="Voz de la narrativa (TTS)">
             <div className="space-y-1.5">
               <Label htmlFor="tts-model" className="sr-only">
-                Modelo Gemini TTS
+                Voz de la narrativa (TTS)
               </Label>
               <Select
                 value={ttsModel ?? '__default__'}
@@ -188,7 +188,8 @@ export function SettingsPanel({
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Cambia si agotas las 3 solicitudes/min gratuitas — cada modelo tiene cuota propia.
+                Solo aplica en Detectar: el estudio usa siempre la voz por defecto. Las voces de Azure responden en
+                ~1 s; los modelos Gemini tardan ~6–14 s y cada uno tiene su propia cuota.
               </p>
             </div>
           </SettingCard>
