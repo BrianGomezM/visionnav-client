@@ -12,6 +12,7 @@ import {
   primaryButtonClass,
 } from '@/components/study/form-controls'
 import { ANCLAS_PROVISIONALES, EMPTY_ESCALAS, ESCALAS, cleanEscalas, type Escalas } from '@/lib/study-protocol'
+import { SCALE_HELP } from '@/lib/study-help'
 
 type Motivo = 'completada' | 'retiro_participante' | 'interrumpida_tecnica'
 
@@ -69,6 +70,7 @@ export function SessionClose({
             key={e.key}
             label={e.label}
             hint={e.ayuda}
+            info={SCALE_HELP[e.key]}
             value={escalas[e.key]}
             onChange={(v) => setEscalas((p) => ({ ...p, [e.key]: v }))}
           />

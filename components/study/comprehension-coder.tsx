@@ -1,10 +1,16 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { inputClass } from '@/components/study/form-controls'
+import { FieldInfo } from '@/components/study/field-info'
+import { FIELD_HELP } from '@/lib/study-help'
+import { narratedLocation, parseNarrative, type Ubicacion } from '@/lib/narrative-parse'
+import { cn } from '@/lib/utils'
 import type { Comprendida, Comprension, SiNoReportada } from '@/lib/study-protocol'
+
+const QUICK: [Ubicacion, string][] = [['izquierda', 'Izquierda'], ['centro', 'Centro / frente'], ['derecha', 'Derecha']]
 
 /**
  * Codificación de la respuesta verbal (doc. 27, §H y §O):
@@ -12,9 +18,18 @@ import type { Comprendida, Comprension, SiNoReportada } from '@/lib/study-protoc
  *    que estaban? ¿la ubicación coincide con la narrativa?
  *  - objetos inventados por el participante (no estaban en la narrativa);
  *  - relaciones espaciales de la narrativa: ¿la comprendió?
- * Omisiones, invenciones y porcentajes los calcula el servidor.
+ * Los objetos y relaciones se precargan de la narrativa (se revisan). Omisiones,
+ * invenciones y porcentajes los calcula el servidor.
  */
-export function ComprehensionCoder({ value, onChange }: { value: Comprension; onChange: (c: Comprension) => void }) {
+export function ComprehensionCoder({
+  value,
+  onChange,
+  narrative,
+}: {
+  value: Comprension
+  onChange: (c: Comprension) => void
+  narrative?: string | null
+}) {
   const uid = useId()
   // Texto crudo de los inventados: se separa por comas al enviar (cleanComprension recorta).
   const [inventados, setInventados] = useState(() => value.objetos_inventados.join(', '))
@@ -23,75 +38,125 @@ export function ComprehensionCoder({ value, onChange }: { value: Comprension; on
   const setRel = (i: number, u: Partial<Comprension['relaciones'][number]>) =>
     onChange({ ...value, relaciones: value.relaciones.map((r, j) => (j === i ? { ...r, ...u } : r)) })
 
+  const loadFromNarrative = () => {
+    if (!narrative) return
+    const p = parseNarrative(narrative)
+    onChange({
+      ...value,
+      objetos: p.objetos.map((o) => ({
+        objeto: o.ubicacion ? `${o.objeto} (${o.ubicacion})` : o.objeto,
+        identificado: false,
+        ubicacion_reportada: null,
+        ubicacion_correcta: 'no_reportada',
+      })),
+      relaciones: p.relaciones.map((r) => ({ relacion: r, respuesta: null, comprendida: 'no_evaluada' })),
+    })
+  }
+
+  // Ubicación rápida: la correcta se propone comparando con lo que dijo la narrativa.
+  const quickLocation = (i: number, loc: Ubicacion) => {
+    const narrated = narratedLocation(value.objetos[i].objeto)
+    setObj(i, {
+      ubicacion_reportada: loc,
+      identificado: true,
+      ubicacion_correcta: narrated ? (narrated === loc ? 'si' : 'no') : value.objetos[i].ubicacion_correcta,
+    })
+  }
+
   return (
     <div className="space-y-5">
-      {/* Sugerencias de posición horizontal (tarea espacial); se admite texto libre para otras relaciones. */}
-      <datalist id={`${uid}-ubicaciones`}>
-        <option value="izquierda" />
-        <option value="centro" />
-        <option value="derecha" />
-      </datalist>
+      {narrative && (
+        <Button type="button" variant="outline" size="sm" className="gap-2" onClick={loadFromNarrative}>
+          <Wand2 className="w-4 h-4" aria-hidden="true" /> {value.objetos.length ? 'Volver a cargar' : 'Cargar'} objetos y relaciones de la narrativa
+        </Button>
+      )}
+
       {/* ── Objetos ── */}
       <fieldset className="space-y-2">
-        <legend className="text-sm font-medium text-foreground">Objetos mencionados en la narrativa</legend>
-        <p className="text-xs text-muted-foreground">
-          Una fila por objeto que la narrativa menciona (tome la lista del texto mostrado arriba).
-        </p>
-        {value.objetos.map((o, i) => (
-          <div key={i} className="grid md:grid-cols-[1fr_auto_1fr_auto_auto] gap-2 items-end rounded-lg border border-border p-2">
-            <div>
-              <label htmlFor={`${uid}-o${i}`} className="text-xs text-muted-foreground block">
-                Objeto {i + 1}
-              </label>
-              <input id={`${uid}-o${i}`} className={inputClass} value={o.objeto} onChange={(e) => setObj(i, { objeto: e.target.value })} />
+        <legend className="text-sm font-medium text-foreground">
+          Objetos mencionados en la narrativa
+          <FieldInfo help={FIELD_HELP.objetos} />
+        </legend>
+        {value.objetos.length === 0 && (
+          <p className="text-xs text-muted-foreground">Cárguelos de la narrativa o añádalos uno por uno.</p>
+        )}
+        {value.objetos.map((o, i) => {
+          const narrated = narratedLocation(o.objeto)
+          return (
+            <div key={i} className="rounded-lg border border-border p-3 space-y-2">
+              <div className="grid md:grid-cols-[1fr_auto_auto] gap-2 items-end">
+                <div>
+                  <label htmlFor={`${uid}-o${i}`} className="text-xs text-muted-foreground block">
+                    Objeto {i + 1} {narrated && `· la narrativa dijo: ${narrated}`}
+                  </label>
+                  <input id={`${uid}-o${i}`} className={inputClass} value={o.objeto} onChange={(e) => setObj(i, { objeto: e.target.value })} />
+                </div>
+                <label className="flex items-center gap-2 text-sm pb-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="accent-[#4B45A8] w-4 h-4"
+                    checked={o.identificado}
+                    onChange={(e) => setObj(i, { identificado: e.target.checked })}
+                  />
+                  Lo nombró
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Quitar objeto ${i + 1}`}
+                  onClick={() => onChange({ ...value, objetos: value.objetos.filter((_, j) => j !== i) })}
+                >
+                  <Trash2 className="w-4 h-4" aria-hidden="true" />
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <div role="group" aria-label={`Dónde dijo que estaba el objeto ${i + 1}`} className="flex flex-wrap gap-1.5">
+                  {QUICK.map(([loc, text]) => (
+                    <button
+                      key={loc}
+                      type="button"
+                      aria-pressed={o.ubicacion_reportada === loc}
+                      onClick={() => quickLocation(i, loc)}
+                      className={cn(
+                        'rounded-lg border px-2.5 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4B45A8]',
+                        o.ubicacion_reportada === loc ? 'border-[#4B45A8] bg-[#4B45A8] text-white' : 'border-border'
+                      )}
+                    >
+                      {text}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex-1 min-w-40">
+                  <label htmlFor={`${uid}-u${i}`} className="text-xs text-muted-foreground block">
+                    Ubicación que indicó (texto libre)
+                  </label>
+                  <input
+                    id={`${uid}-u${i}`}
+                    className={inputClass}
+                    value={o.ubicacion_reportada ?? ''}
+                    onChange={(e) => setObj(i, { ubicacion_reportada: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label htmlFor={`${uid}-c${i}`} className="text-xs text-muted-foreground block">
+                    ¿Coincide con la narrativa?
+                  </label>
+                  <select
+                    id={`${uid}-c${i}`}
+                    className={inputClass}
+                    value={o.ubicacion_correcta}
+                    onChange={(e) => setObj(i, { ubicacion_correcta: e.target.value as SiNoReportada })}
+                  >
+                    <option value="no_reportada">No la indicó</option>
+                    <option value="si">Sí</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+              </div>
             </div>
-            <label className="flex items-center gap-2 text-sm pb-2">
-              <input
-                type="checkbox"
-                className="accent-[#4B45A8]"
-                checked={o.identificado}
-                onChange={(e) => setObj(i, { identificado: e.target.checked })}
-              />
-              Lo identificó
-            </label>
-            <div>
-              <label htmlFor={`${uid}-u${i}`} className="text-xs text-muted-foreground block">
-                Ubicación que indicó
-              </label>
-              <input
-                id={`${uid}-u${i}`}
-                list={`${uid}-ubicaciones`}
-                className={inputClass}
-                value={o.ubicacion_reportada ?? ''}
-                onChange={(e) => setObj(i, { ubicacion_reportada: e.target.value })}
-              />
-            </div>
-            <div>
-              <label htmlFor={`${uid}-c${i}`} className="text-xs text-muted-foreground block">
-                ¿Ubicación correcta?
-              </label>
-              <select
-                id={`${uid}-c${i}`}
-                className={inputClass}
-                value={o.ubicacion_correcta}
-                onChange={(e) => setObj(i, { ubicacion_correcta: e.target.value as SiNoReportada })}
-              >
-                <option value="no_reportada">No la indicó</option>
-                <option value="si">Sí</option>
-                <option value="no">No</option>
-              </select>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={`Quitar objeto ${i + 1}`}
-              onClick={() => onChange({ ...value, objetos: value.objetos.filter((_, j) => j !== i) })}
-            >
-              <Trash2 className="w-4 h-4" aria-hidden="true" />
-            </Button>
-          </div>
-        ))}
+          )
+        })}
         <Button
           type="button"
           variant="outline"
@@ -110,9 +175,12 @@ export function ComprehensionCoder({ value, onChange }: { value: Comprension; on
 
       {/* ── Inventados ── */}
       <div>
-        <label htmlFor={`${uid}-inv`} className="text-sm font-medium text-foreground block">
-          Objetos que el participante mencionó y NO estaban en la narrativa
-        </label>
+        <div className="flex items-center">
+          <label htmlFor={`${uid}-inv`} className="text-sm font-medium text-foreground">
+            Objetos que el participante mencionó y NO estaban en la narrativa
+          </label>
+          <FieldInfo help={FIELD_HELP.inventados} />
+        </div>
         <input
           id={`${uid}-inv`}
           className={inputClass}
@@ -130,7 +198,13 @@ export function ComprehensionCoder({ value, onChange }: { value: Comprension; on
 
       {/* ── Relaciones ── */}
       <fieldset className="space-y-2">
-        <legend className="text-sm font-medium text-foreground">Relaciones espaciales de la narrativa</legend>
+        <legend className="text-sm font-medium text-foreground">
+          Relaciones espaciales de la narrativa
+          <FieldInfo help={FIELD_HELP.relaciones} />
+        </legend>
+        {value.relaciones.length === 0 && (
+          <p className="text-xs text-muted-foreground">La narrativa no tiene relaciones entre objetos, o no se han cargado.</p>
+        )}
         {value.relaciones.map((r, i) => (
           <div key={i} className="grid md:grid-cols-[1fr_1fr_auto_auto] gap-2 items-end rounded-lg border border-border p-2">
             <div>

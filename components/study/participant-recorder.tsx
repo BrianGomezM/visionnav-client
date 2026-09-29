@@ -133,3 +133,134 @@ export function ParticipantRecorder({ onChange }: { onChange: (blob: Blob | null
     />
   )
 }
+
+/**
+ * Grabadora compacta de la barra fija de cada prueba: se pulsa al hacer la pregunta
+ * (marca el inicio de la respuesta), admite pausa y se sube al guardar la respuesta.
+ */
+export function ResponseRecorder({
+  onStart,
+  onChange,
+}: {
+  onStart: () => void
+  onChange: (blob: Blob | null) => void
+}) {
+  const recRef = useRef<MediaRecorder | null>(null)
+  const chunks = useRef<Blob[]>([])
+  const acc = useRef(0)
+  const since = useRef(0)
+  const [state, setState] = useState<'idle' | 'recording' | 'paused' | 'done'>('idle')
+  const [elapsed, setElapsed] = useState(0)
+  const [url, setUrl] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => () => {
+    recRef.current?.stream.getTracks().forEach((t) => t.stop())
+  }, [])
+  useEffect(() => () => {
+    if (url) URL.revokeObjectURL(url)
+  }, [url])
+  useEffect(() => {
+    if (state !== 'recording') return
+    const id = setInterval(() => setElapsed((acc.current + performance.now() - since.current) / 1000), 500)
+    return () => clearInterval(id)
+  }, [state])
+
+  const start = async () => {
+    setError(null)
+    if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setError('Este navegador no permite grabar audio.')
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const rec = new MediaRecorder(stream)
+      chunks.current = []
+      rec.ondataavailable = (e) => e.data.size && chunks.current.push(e.data)
+      rec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop())
+        const blob = new Blob(chunks.current, { type: rec.mimeType || 'audio/webm' })
+        setUrl(URL.createObjectURL(blob))
+        onChange(blob)
+      }
+      acc.current = 0
+      since.current = performance.now()
+      setElapsed(0)
+      rec.start()
+      recRef.current = rec
+      setState('recording')
+      onStart()
+    } catch {
+      setError('No se obtuvo permiso para usar el micrófono.')
+    }
+  }
+  const pause = () => {
+    recRef.current?.pause()
+    acc.current += performance.now() - since.current
+    setState('paused')
+  }
+  const resume = () => {
+    recRef.current?.resume()
+    since.current = performance.now()
+    setState('recording')
+  }
+  const stop = () => {
+    if (state === 'recording') acc.current += performance.now() - since.current
+    setElapsed(acc.current / 1000)
+    recRef.current?.stop()
+    setState('done')
+  }
+  const discard = () => {
+    setUrl(null)
+    setElapsed(0)
+    setState('idle')
+    onChange(null)
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {state === 'idle' && (
+        <Button type="button" size="sm" onClick={start} className="gap-2 bg-[#B42318] hover:bg-[#912018] text-white">
+          <Mic className="w-4 h-4" aria-hidden="true" /> Grabar respuesta
+        </Button>
+      )}
+      {(state === 'recording' || state === 'paused') && (
+        <>
+          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[#B42318]">
+            <span className={`w-2.5 h-2.5 rounded-full bg-[#B42318] ${state === 'recording' ? 'animate-pulse' : 'opacity-40'}`} aria-hidden="true" />
+            {state === 'recording' ? 'Grabando' : 'En pausa'} {fmt(elapsed)}
+          </span>
+          {state === 'recording' ? (
+            <Button type="button" size="sm" variant="outline" onClick={pause}>
+              Pausar
+            </Button>
+          ) : (
+            <Button type="button" size="sm" variant="outline" onClick={resume}>
+              Reanudar
+            </Button>
+          )}
+          <Button type="button" size="sm" variant="destructive" onClick={stop} className="gap-1">
+            <Square className="w-3.5 h-3.5" aria-hidden="true" /> Detener
+          </Button>
+        </>
+      )}
+      {state === 'done' && url && (
+        <>
+          <audio controls src={url} aria-label="Grabación de la respuesta" className="h-8 max-w-56" />
+          <span className="text-xs text-muted-foreground">{fmt(elapsed)} · se sube al guardar</span>
+          <Button type="button" size="sm" variant="ghost" onClick={discard} className="gap-1">
+            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Descartar
+          </Button>
+        </>
+      )}
+      <span role="status" aria-live="polite" className="sr-only">
+        {state === 'recording' ? 'Grabando la respuesta' : state === 'paused' ? 'Grabación en pausa' : state === 'done' ? 'Grabación lista' : ''}
+      </span>
+      {error && (
+        <span role="alert" className="text-xs text-[#B42318]">
+          {error}
+        </span>
+      )}
+    </div>
+  )
+}

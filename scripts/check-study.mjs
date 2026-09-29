@@ -77,7 +77,7 @@ await check('ficha: normalización (sin lector → no_utiliza; etapa solo si adq
 // ── Consentimiento y contexto ──
 await check('consentimiento: las cuatro afirmaciones son obligatorias (la 3 es la grabación)', () => {
   const keys = ['acepta_participar', 'puede_detenerse', 'autoriza_grabacion', 'autoriza_uso_academico']
-  const c = { version: 'CI-VisionNav-Piloto v0.3', ...Object.fromEntries(keys.map((k) => [k, true])) }
+  const c = { version: 'CI-VisionNav-Piloto v0.4', ...Object.fromEntries(keys.map((k) => [k, true])) }
   assert.ok(m.consentComplete(c))
   for (const k of keys) assert.ok(!m.consentComplete({ ...c, [k]: false }), k)
 })
@@ -174,15 +174,20 @@ await check('decisión: el cliente envía solo la alternativa elegida (nunca la 
 })
 
 // ── Consentimiento: texto adaptado y .docx descargable ──
-const loadTs = async (rel) => {
-  const code = ts.transpileModule(readFileSync(new URL(rel, root), 'utf8'), {
+const loaded = {}
+const loadTs = async (rel, aliases = {}) => {
+  let code = ts.transpileModule(readFileSync(new URL(rel, root), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
   }).outputText
+  for (const [alias, target] of Object.entries(aliases)) code = code.replaceAll(`'${alias}'`, `'${loaded[target]}'`)
   const f = join(mkdtempSync(join(tmpdir(), 'study-')), rel.split('/').pop().replace('.ts', '.mjs'))
   writeFileSync(f, code)
-  return import('file://' + f.replace(/\\/g, '/'))
+  loaded[rel] = 'file://' + f.replace(/\\/g, '/')
+  return import(loaded[rel])
 }
 const consent = await loadTs('lib/consent.ts')
+const consentPrint = await loadTs('lib/consent-print.ts', { '@/lib/consent': 'lib/consent.ts' })
+const narrative = await loadTs('lib/narrative-parse.ts')
 const docx = await loadTs('lib/docx.ts')
 const unzip = (buf) => {
   const b = Buffer.from(buf)
@@ -206,19 +211,21 @@ await check('consentimiento: un documento por tipo de participante, igual al del
   const docs = consent.CONSENT_DOCUMENTS
   assert.deepEqual(Object.keys(docs).sort(), ['objetivo', 'piloto'])
   // Mismas versiones que app/routes/study.py (CONSENT_VERSIONS).
-  assert.equal(docs.piloto.version, 'CI-VisionNav-Piloto v0.3')
-  assert.equal(docs.objetivo.version, 'CI-VisionNav-Objetivo v0.3')
+  assert.equal(docs.piloto.version, 'CI-VisionNav-Piloto v0.4')
+  assert.equal(docs.objetivo.version, 'CI-VisionNav-Objetivo v0.4')
   assert.deepEqual(consent.CONSENT_KEYS, ['acepta_participar', 'puede_detenerse', 'autoriza_grabacion', 'autoriza_uso_academico'])
   for (const [tipo, d] of Object.entries(docs)) {
     const text = JSON.stringify(d.bloques)
     for (const k of consent.CONSENT_KEYS) assert.ok(text.includes(d.afirmaciones[k]), `${tipo}: afirmación ${k} en el texto`)
-    for (const s of ['No se realizará grabación de video', 'implica autorizar la grabación', '[PENDIENTE'])
+    for (const s of ['No se realizará grabación de video', 'implica autorizar la grabación', 'Microsoft Azure', 'un (1) año'])
       assert.ok(text.includes(s), `${tipo}: ${s}`)
+    // v0.4: sin pendientes ni la frase anterior del almacenamiento en el computador.
+    for (const s of ['[PENDIENTE', 'en el computador del investigador']) assert.ok(!text.includes(s), `${tipo}: ${s}`)
     // Erratas del v0.3 corregidas en el texto que se lee.
     for (const s of ['de el participante', 'a él investigadora', 'se solicitarán el nombre', 'no se utilizarán como'])
       assert.ok(!text.includes(s), `${tipo}: ${s}`)
     // Lo que se descarga es el documento real del investigador.
-    for (const f of Object.values(d.archivos)) assert.ok(statSync(new URL(`public${f}`, root)).size > 10_000, f)
+    assert.ok(statSync(new URL(`public${d.original_v03}`, root)).size > 10_000, d.original_v03)
   }
   assert.ok(JSON.stringify(docs.objetivo.bloques).includes('ceguera total'))
   assert.ok(JSON.stringify(docs.piloto.bloques).includes('prueba piloto'))
@@ -228,6 +235,34 @@ await check('consentimiento: un documento por tipo de participante, igual al del
     assert.ok(!wizard.includes(s), s)
   assert.match(wizard, /CONSENT_DOCUMENTS/)
   assert.match(wizard, /grabacion_consentimiento/)
+  // El nombre del acta nunca entra al payload de la sesión.
+  const submit = wizard.slice(wizard.indexOf('const submit = async'), wizard.indexOf('const lectoresUsados'))
+  assert.ok(submit.length > 100 && !/nombre/.test(submit), 'el nombre no se envía al servidor')
+})
+await check('acta (§13): documento completo con la tabla diligenciada y firmas', () => {
+  const acta = { nombre: 'Nombre De Prueba', codigo: 'PTEST01', lugar: 'Cali', fecha: '29 de septiembre de 2026',
+    participar: true, grabacion: true, usoAcademico: true }
+  const html = consentPrint.consentHtml(consent.CONSENT_DOCUMENTS.objetivo, acta)
+  for (const s of ['Nombre De Prueba', 'PTEST01', 'Cali, 29 de septiembre de 2026', 'Sí ☒', 'Firma del investigador responsable',
+    'Firma de testigo', 'CI-VisionNav-Objetivo v0.4', '12. Consentimiento verbal', 'leído en voz alta'])
+    assert.ok(html.includes(s), s)
+  const blank = consentPrint.consentHtml(consent.CONSENT_DOCUMENTS.piloto, null)
+  assert.ok(!blank.includes('☒') && !blank.includes('Firma de testigo') && blank.includes('Sí ☐'))
+  assert.ok(consentPrint.consentHtml(consent.CONSENT_DOCUMENTS.piloto, { ...acta, nombre: '<b>x</b>' }).includes('&lt;b&gt;x'))
+})
+await check('narrativa: objetos con su ubicación y relaciones (sugerencias para codificar)', () => {
+  const d3 = 'Parece que estás en una sala de estar. Persona a tu derecha a aproximadamente 4 pasos. Sofá a tu izquierda a ' +
+    'aproximadamente 4 pasos. Planta en maceta a tu derecha a aproximadamente 5 pasos. Puedes avanzar hacia el frente con cuidado.'
+  const p = narrative.parseNarrative(d3)
+  assert.deepEqual(p.objetos, [
+    { objeto: 'persona', ubicacion: 'derecha' }, { objeto: 'sofá', ubicacion: 'izquierda' },
+    { objeto: 'planta en maceta', ubicacion: 'derecha' }])
+  assert.deepEqual(p.relaciones, [])
+  const c1 = narrative.parseNarrative('Hay una silla al frente, delante de la mesa. La mesa está al frente a unos 4 pasos.')
+  assert.deepEqual(c1.objetos.map((o) => o.objeto), ['silla', 'mesa'])
+  assert.equal(c1.relaciones.length, 1)
+  assert.equal(narrative.narratedLocation('persona (derecha)'), 'derecha')
+  assert.equal(narrative.narratedLocation('persona'), null)
 })
 const obj01Ref = { id: 'OBJ-01', pista: 'objetivo', tipo: 'imagen', estado_estimulos: 'por_definir', ejecutable_formal: false, requiere_estimulo: true }
 await check('piloto: las actividades con audio se ejecutan como ensayo', () => {

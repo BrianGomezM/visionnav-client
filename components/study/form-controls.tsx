@@ -9,6 +9,8 @@
  * Espacio) y con lectores de pantalla sin depender de roles ARIA simulados.
  */
 
+import { FieldInfo } from '@/components/study/field-info'
+import type { HelpText } from '@/lib/study-help'
 import { useId, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -63,8 +65,10 @@ export function RadioGroupField<T extends string>({
   hint,
   required,
   inline = true,
+  info,
 }: {
   legend: string
+  info?: HelpText
   name: string
   options: [T, string][]
   value: T | null
@@ -84,6 +88,7 @@ export function RadioGroupField<T extends string>({
       <legend className="text-sm font-medium text-foreground mb-1.5">
         {legend}
         {required && <Required />}
+        {info && <FieldInfo help={info} />}
       </legend>
       <div className={cn('gap-2', inline ? 'flex flex-wrap' : 'grid')}>
         {toOptions(options).map((o) => {
@@ -190,8 +195,10 @@ export function TextField({
   autoComplete = 'off',
   className,
   inputClassName,
+  info,
 }: {
   label: string
+  info?: HelpText
   value: string
   onChange: (v: string) => void
   error?: string
@@ -205,10 +212,13 @@ export function TextField({
   const id = useId()
   return (
     <div className={className}>
-      <label htmlFor={id} className="text-sm font-medium text-foreground block mb-1.5">
-        {label}
-        {required && <Required />}
-      </label>
+      <div className="flex items-center mb-1.5">
+        <label htmlFor={id} className="text-sm font-medium text-foreground">
+          {label}
+          {required && <Required />}
+        </label>
+        {info && <FieldInfo help={info} />}
+      </div>
       <input
         id={id}
         type="text"
@@ -234,8 +244,10 @@ export function TextAreaField({
   hint,
   rows = 3,
   placeholder,
+  info,
 }: {
   label: string
+  info?: HelpText
   value: string
   onChange: (v: string) => void
   hint?: string
@@ -245,9 +257,12 @@ export function TextAreaField({
   const id = useId()
   return (
     <div>
-      <label htmlFor={id} className="text-sm font-medium text-foreground block mb-1.5">
-        {label}
-      </label>
+      <div className="flex items-center mb-1.5">
+        <label htmlFor={id} className="text-sm font-medium text-foreground">
+          {label}
+        </label>
+        {info && <FieldInfo help={info} />}
+      </div>
       <textarea
         id={id}
         value={value}
@@ -268,9 +283,11 @@ export function LikertField({
   hint,
   value,
   onChange,
+  info,
 }: {
   label: string
   hint?: string
+  info?: HelpText
   value: number | null
   onChange: (v: number | null) => void
 }) {
@@ -278,7 +295,10 @@ export function LikertField({
   const opts: [string, string][] = [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5'], ['na', 'No preguntado']]
   return (
     <fieldset className="py-2" aria-describedby={hint ? `${uid}-hint` : undefined}>
-      <legend className="text-sm text-foreground">{label}</legend>
+      <legend className="text-sm text-foreground">
+        {label}
+        {info && <FieldInfo help={info} />}
+      </legend>
       {hint && (
         <p id={`${uid}-hint`} className="text-xs text-muted-foreground">
           {hint}

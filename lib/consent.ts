@@ -4,9 +4,10 @@
  *   - piloto:   Consentimiento_informado_VisionNav_Personas_Piloto_v0.3
  *   - objetivo: Consentimiento_informado_VisionNav_Personas_Objetivo_v0.3
  *
- * Fuente: los documentos del investigador (public/consentimientos/, que es lo que se
- * descarga). Aquí se transcribe el texto que se lee en voz alta, con las erratas
- * gramaticales corregidas. Lo que el documento aún no define queda como [PENDIENTE].
+ * v0.4 (2026-09-29): texto de los documentos v0.3 del investigador (public/consentimientos/)
+ * con las erratas corregidas y el §9 actualizado por decisión del investigador: la
+ * información se guarda en el servidor del proyecto (Azure) y las grabaciones se
+ * conservan un año. Es el texto que se lee en voz alta y el que se imprime en el acta.
  *
  * La versión se registra en cada sesión y el backend comprueba que corresponda al tipo
  * de participante (vision-api-object-detection: app/routes/study.py, CONSENT_VERSIONS).
@@ -25,16 +26,30 @@ export const CONSENT_KEYS: ConsentKey[] = ['acepta_participar', 'puede_detenerse
 export interface ConsentDocument {
   version: string
   titulo: string
-  archivos: { pdf: string; docx: string }
+  /** Documento original v0.3 del investigador (Word), anterior a la actualización del §9. */
+  original_v03: string
   afirmaciones: Record<ConsentKey, string>
   bloques: ConsentBlock[]
+  /** El acta incluye firma de testigo (documento de personas con ceguera total). */
+  testigo?: boolean
 }
 
-const TRABAJO =
+/** Datos del acta (§13). El nombre SOLO se usa para imprimir: nunca se envía al servidor. */
+export interface ActaData {
+  nombre: string
+  codigo: string
+  lugar: string
+  fecha: string
+  participar: boolean | null
+  grabacion: boolean | null
+  usoAcademico: boolean | null
+}
+
+export const TRABAJO_TITULO =
   'Generación de descripciones narrativas egocéntricas accesibles en entornos Web 3D mediante algoritmo de detección de objetos'
 
 const ENCABEZADO: ConsentBlock[] = [
-  { kind: 'paragraph', text: `Trabajo de Grado: ${TRABAJO}.` },
+  { kind: 'paragraph', text: `Trabajo de Grado: ${TRABAJO_TITULO}.` },
   {
     kind: 'paragraph',
     text:
@@ -91,20 +106,19 @@ const ALMACENAMIENTO = (actividad: string): ConsentBlock[] => [
     kind: 'paragraph',
     text:
       `La información y las grabaciones obtenidas durante ${actividad} serán tratadas de manera confidencial. Las grabaciones de ` +
-      'audio serán almacenadas en el computador del investigador responsable y el acceso estará restringido al investigador ' +
-      'para efectos del análisis académico.',
-  },
-  {
-    kind: 'pending',
-    text:
-      '[PENDIENTE de actualizar en el documento: por decisión del investigador, el sistema guarda las grabaciones en el servidor ' +
-      'del proyecto (Azure), con acceso restringido por la clave del investigador, no en su computador.]',
+      'audio y los registros de la sesión serán almacenados en el servidor del proyecto en la nube (Microsoft Azure), ' +
+      'identificados con el código de participante, y el acceso estará restringido al investigador responsable, mediante una ' +
+      'clave, para efectos del análisis académico.',
   },
 ]
 
 const PERIODO: ConsentBlock[] = [
-  { kind: 'paragraph', text: 'Periodo de conservación de las grabaciones:' },
-  { kind: 'pending', text: '[PENDIENTE: el documento v0.3 no indica el periodo de conservación de las grabaciones.]' },
+  {
+    kind: 'paragraph',
+    text:
+      'Periodo de conservación de las grabaciones: las grabaciones se conservarán durante un (1) año contado a partir de la ' +
+      'fecha de la sesión. Cumplido este plazo, serán eliminadas del servidor.',
+  },
 ]
 
 const INFORMACION: ConsentBlock[] = [
@@ -121,11 +135,10 @@ const INFORMACION: ConsentBlock[] = [
 const REGISTRO: ConsentBlock[] = [
   { kind: 'heading', text: '13. Registro del consentimiento' },
   {
-    kind: 'note',
+    kind: 'paragraph',
     text:
-      'Se completa en el formato impreso: nombre completo del participante, código, lugar y fecha, consentimiento para participar, ' +
-      'autorización de grabación de audio, autorización para uso académico y firma del investigador responsable. El nombre no se ' +
-      'registra en el sistema.',
+      'Si el consentimiento se obtiene verbalmente, el investigador registrará la respuesta del participante y dejará constancia ' +
+      'de que el documento fue leído en voz alta y de que el participante manifestó su decisión.',
   },
 ]
 
@@ -147,12 +160,9 @@ const AFIRMACIONES_PILOTO: Record<ConsentKey, string> = {
 }
 
 const PILOTO: ConsentDocument = {
-  version: 'CI-VisionNav-Piloto v0.3',
+  version: 'CI-VisionNav-Piloto v0.4',
   titulo: 'Consentimiento informado — Personas piloto',
-  archivos: {
-    pdf: '/consentimientos/Consentimiento_informado_VisionNav_Personas_Piloto_v0.3.pdf',
-    docx: '/consentimientos/Consentimiento_informado_VisionNav_Personas_Piloto_v0.3.docx',
-  },
+  original_v03: '/consentimientos/Consentimiento_informado_VisionNav_Personas_Piloto_v0.3.docx',
   afirmaciones: AFIRMACIONES_PILOTO,
   bloques: [
     ...ENCABEZADO,
@@ -272,12 +282,9 @@ const AFIRMACIONES_OBJETIVO: Record<ConsentKey, string> = {
 }
 
 const OBJETIVO: ConsentDocument = {
-  version: 'CI-VisionNav-Objetivo v0.3',
+  version: 'CI-VisionNav-Objetivo v0.4',
   titulo: 'Consentimiento informado — Personas con ceguera total',
-  archivos: {
-    pdf: '/consentimientos/Consentimiento_informado_VisionNav_Personas_Objetivo_v0.3.pdf',
-    docx: '/consentimientos/Consentimiento_informado_VisionNav_Personas_Objetivo_v0.3.docx',
-  },
+  original_v03: '/consentimientos/Consentimiento_informado_VisionNav_Personas_Objetivo_v0.3.docx',
   afirmaciones: AFIRMACIONES_OBJETIVO,
   bloques: [
     ...ENCABEZADO,
@@ -379,8 +386,8 @@ const OBJETIVO: ConsentDocument = {
     },
     afirmacionesLista(AFIRMACIONES_OBJETIVO),
     ...REGISTRO,
-    { kind: 'note', text: 'El formato impreso incluye además la firma de testigo, si corresponde.' },
   ],
+  testigo: true,
 }
 
 export const CONSENT_DOCUMENTS: Record<TipoParticipante, ConsentDocument> = { piloto: PILOTO, objetivo: OBJETIVO }

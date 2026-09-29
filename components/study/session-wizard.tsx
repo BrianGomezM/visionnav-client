@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeft, ArrowRight, Info, UserPlus } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, Info, Printer, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorCard } from '@/components/shared/error-card'
@@ -34,7 +34,8 @@ import {
   type SessionCreatePayload,
   type TipoParticipante,
 } from '@/lib/study-protocol'
-import { CONSENT_DOCUMENTS, CONSENT_KEYS, type ConsentKey } from '@/lib/consent'
+import { CONSENT_DOCUMENTS, CONSENT_KEYS, type ActaData, type ConsentKey } from '@/lib/consent'
+import { printConsent } from '@/lib/consent-print'
 import { ConsentDownloadLinks, ConsentText } from '@/components/study/consent-document'
 import { AudioRecorder } from '@/components/study/participant-recorder'
 
@@ -53,6 +54,8 @@ const EMPTY_ANSWERS: Record<ConsentKey, Answer | null> = {
   autoriza_grabacion: null,
   autoriza_uso_academico: null,
 }
+
+const today = () => new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
 
 const label = <T extends string>(opts: [T, string][], v: T | null | undefined) => opts.find(([k]) => k === v)?.[1] ?? '—'
 const fmtDuration = (s: number | null) => (s === null ? '—' : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`)
@@ -101,6 +104,12 @@ export function SessionWizard({
   })
   const [showErrors, setShowErrors] = useState(false)
   const [encoding, setEncoding] = useState(false)
+  // Acta (§13): el nombre SOLO se usa para imprimir; nunca entra al payload ni al servidor.
+  const [nombre, setNombre] = useState('')
+  const [lugar, setLugar] = useState('')
+  const [fecha, setFecha] = useState(today)
+  const [actaImpresa, setActaImpresa] = useState(false)
+  const [popupBlocked, setPopupBlocked] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   // El código se asigna solo (siguiente libre) mientras el investigador no lo edite.
@@ -132,6 +141,7 @@ export function SessionWizard({
     }))
     setAnswers(EMPTY_ANSWERS)
     setRecording(null)
+    setActaImpresa(false)
   }, [tipo])
 
   const participantErrors = tipo ? validateParticipant(codigo, tipo, ficha) : { tipo: 'Seleccione el tipo de participante.' }
@@ -150,10 +160,30 @@ export function SessionWizard({
       }
     : null
   const anyNo = CONSENT_KEYS.some((k) => answers[k] === 'no')
+  const yn = (k: ConsentKey) => (answers[k] === null ? null : answers[k] === 'si')
+  const acta: ActaData = {
+    nombre: nombre.trim(),
+    codigo,
+    lugar: lugar.trim(),
+    fecha: fecha.trim(),
+    participar: yn('acepta_participar'),
+    grabacion: yn('autoriza_grabacion'),
+    usoAcademico: yn('autoriza_uso_academico'),
+  }
+  const actaErrors: Record<string, string> = {}
+  if (!acta.nombre) actaErrors.nombre = 'Escriba el nombre completo para el acta.'
+  if (!acta.lugar) actaErrors.lugar = 'Indique el lugar.'
+  if (!acta.fecha) actaErrors.fecha = 'Indique la fecha.'
+  const imprimirActa = () => {
+    if (!doc) return
+    const ok = printConsent(doc, acta)
+    setPopupBlocked(!ok)
+    if (ok) setActaImpresa(true)
+  }
 
   const stepValid = [
     Object.keys(participantErrors).length === 0 && Object.keys(contextErrors).length === 0,
-    Boolean(consent && consentComplete(consent) && recording),
+    Boolean(consent && consentComplete(consent) && recording) && Object.keys(actaErrors).length === 0,
     true,
   ]
 
@@ -419,7 +449,8 @@ export function SessionWizard({
               <li>Pida permiso verbal para grabar la lectura del consentimiento.</li>
               <li>Pulse «Grabar lectura del consentimiento» y lea el texto completo en voz alta.</li>
               <li>Lea cada afirmación del §12 y registre abajo la respuesta del participante.</li>
-              <li>Detenga la grabación. Complete y firme el formato impreso (nombre, código, lugar y fecha).</li>
+              <li>Detenga la grabación y complete abajo los datos del acta (§13). No pida el nombre en voz alta mientras graba.</li>
+              <li>Imprima o guarde el acta en PDF y fírmela.</li>
             </ol>
           </div>
 
@@ -462,6 +493,58 @@ export function SessionWizard({
                 </p>
               </div>
             )}
+          </div>
+
+          <div className="space-y-3 rounded-lg border border-border p-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">13. Registro del consentimiento (acta)</p>
+              <p className="text-xs text-muted-foreground">
+                Estos datos se imprimen en el acta. El nombre no se guarda en el sistema: solo queda en el papel o PDF.
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <TextField
+                label="Nombre completo del participante"
+                value={nombre}
+                onChange={setNombre}
+                required
+                error={showErrors ? actaErrors.nombre : undefined}
+                hint="Solo para el acta impresa."
+              />
+              <TextField label="Código de participante" value={codigo} onChange={() => {}} hint="Asignado en el paso 1." inputClassName="bg-muted/40" />
+              <TextField label="Lugar" value={lugar} onChange={setLugar} required error={showErrors ? actaErrors.lugar : undefined} />
+              <TextField label="Fecha" value={fecha} onChange={setFecha} required error={showErrors ? actaErrors.fecha : undefined} />
+            </div>
+            <dl className="grid sm:grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm">
+              {(
+                [
+                  ['Consentimiento para participar', acta.participar],
+                  ['Autorización de grabación de audio', acta.grabacion],
+                  ['Autorización para uso académico de respuestas y observaciones', acta.usoAcademico],
+                ] as const
+              ).map(([k, v]) => (
+                <div key={k} className="contents">
+                  <dt className="text-muted-foreground">{k}</dt>
+                  <dd className="font-medium">{v === null ? '— (según la afirmación)' : v ? 'Sí' : 'No'}</dd>
+                </div>
+              ))}
+            </dl>
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              disabled={Object.keys(actaErrors).length > 0 || !consent || !consentComplete(consent)}
+              onClick={imprimirActa}
+            >
+              <Printer className="w-4 h-4" aria-hidden="true" /> Imprimir / guardar acta en PDF
+            </Button>
+            <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
+              {popupBlocked
+                ? 'No se pudo abrir la impresión del acta en este navegador.'
+                : actaImpresa
+                  ? 'Acta generada. Guárdela junto con los demás formatos firmados.'
+                  : 'Se habilita cuando las cuatro afirmaciones son «sí» y el acta tiene nombre, lugar y fecha.'}
+            </p>
           </div>
         </div>
       )}
@@ -519,7 +602,20 @@ export function SessionWizard({
             </dd>
             <dt className="text-muted-foreground">Grabación de respuestas</dt>
             <dd>Autorizada (afirmación 3)</dd>
+            <dt className="text-muted-foreground">Acta (§13)</dt>
+            <dd>
+              {acta.lugar}, {acta.fecha} · {actaImpresa ? 'generada' : 'aún no generada'}
+            </dd>
           </dl>
+          {!actaImpresa && (
+            <div role="note" className="flex flex-wrap items-center gap-3 p-3 rounded-lg bg-[#FFFAEB] border border-[#B54708]/30 text-[#7A2E0E] text-sm">
+              <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span>El acta todavía no se ha impreso. El nombre no se guarda: imprímala antes de crear la sesión.</span>
+              <Button type="button" variant="outline" size="sm" className="gap-2" onClick={imprimirActa}>
+                <Printer className="w-4 h-4" aria-hidden="true" /> Imprimir acta
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
