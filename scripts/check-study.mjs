@@ -75,10 +75,11 @@ await check('ficha: normalización (sin lector → no_utiliza; etapa solo si adq
 })
 
 // ── Consentimiento y contexto ──
-await check('consentimiento: las tres afirmaciones son obligatorias', () => {
-  const c = { modalidad: 'verbal', comprende_y_acepta: true, puede_retirarse: true, uso_anonimo: true, formato_referencia: null }
+await check('consentimiento: las cuatro afirmaciones son obligatorias (la 3 es la grabación)', () => {
+  const keys = ['acepta_participar', 'puede_detenerse', 'autoriza_grabacion', 'autoriza_uso_academico']
+  const c = { version: 'CI-VisionNav-Piloto v0.3', ...Object.fromEntries(keys.map((k) => [k, true])) }
   assert.ok(m.consentComplete(c))
-  for (const k of ['comprende_y_acepta', 'puede_retirarse', 'uso_anonimo']) assert.ok(!m.consentComplete({ ...c, [k]: false }), k)
+  for (const k of keys) assert.ok(!m.consentComplete({ ...c, [k]: false }), k)
 })
 await check('contexto: dispositivo y reproducción "otro" requieren detalle', () => {
   assert.ok(m.validateContext({ dispositivo: 'otro', dispositivo_otro: '', reproduccion_audio: 'audifonos', reproduccion_otro: null }).dispositivo_otro)
@@ -201,24 +202,37 @@ const unzip = (buf) => {
   }
   return out
 }
-await check('consentimiento: borrador adaptado, sin aprobación afirmada y con pendientes marcados', () => {
-  const text = JSON.stringify(consent.CONSENT_BLOCKS)
-  for (const s of ['BORRADOR', 'NO aprobado', 'no afirma que exista dicha aprobación', 'Ninguna tarea implica caminar',
-    'No se graba video', '[PENDIENTE: confirmar con los directores si se requiere la aprobación de un comité de ética'])
-    assert.ok(text.includes(s), s)
-  // Nada del procedimiento del otro estudio (tareas físicas, video obligatorio, espacio 4×6 m).
-  for (const s of ['abrir cajones', 'audio y video durante la sesión', '4 metros', 'ceguera total adquirida se orientan'])
-    assert.ok(!text.includes(s), s)
-  assert.equal(Object.keys(consent.CONSENT_STATEMENTS).join(), 'comprende_y_acepta,puede_retirarse,uso_anonimo')
-  assert.match(readFileSync(new URL('components/study/session-wizard.tsx', root), 'utf8'), /CONSENT_STATEMENTS/)
+await check('consentimiento: un documento por tipo de participante, igual al del backend', () => {
+  const docs = consent.CONSENT_DOCUMENTS
+  assert.deepEqual(Object.keys(docs).sort(), ['objetivo', 'piloto'])
+  // Mismas versiones que app/routes/study.py (CONSENT_VERSIONS).
+  assert.equal(docs.piloto.version, 'CI-VisionNav-Piloto v0.3')
+  assert.equal(docs.objetivo.version, 'CI-VisionNav-Objetivo v0.3')
+  assert.deepEqual(consent.CONSENT_KEYS, ['acepta_participar', 'puede_detenerse', 'autoriza_grabacion', 'autoriza_uso_academico'])
+  for (const [tipo, d] of Object.entries(docs)) {
+    const text = JSON.stringify(d.bloques)
+    for (const k of consent.CONSENT_KEYS) assert.ok(text.includes(d.afirmaciones[k]), `${tipo}: afirmación ${k} en el texto`)
+    for (const s of ['No se realizará grabación de video', 'implica autorizar la grabación', '[PENDIENTE'])
+      assert.ok(text.includes(s), `${tipo}: ${s}`)
+    // Erratas del v0.3 corregidas en el texto que se lee.
+    for (const s of ['de el participante', 'a él investigadora', 'se solicitarán el nombre', 'no se utilizarán como'])
+      assert.ok(!text.includes(s), `${tipo}: ${s}`)
+    // Lo que se descarga es el documento real del investigador.
+    for (const f of Object.values(d.archivos)) assert.ok(statSync(new URL(`public${f}`, root)).size > 10_000, f)
+  }
+  assert.ok(JSON.stringify(docs.objetivo.bloques).includes('ceguera total'))
+  assert.ok(JSON.stringify(docs.piloto.bloques).includes('prueba piloto'))
+  // El asistente ya no muestra el aviso de borrador ni pide modalidad o referencia del formato.
+  const wizard = readFileSync(new URL('components/study/session-wizard.tsx', root), 'utf8')
+  for (const s of ['Borrador pendiente', 'Modalidad del consentimiento', 'Referencia del formato', 'Sugerir código', 'Investigador (iniciales'])
+    assert.ok(!wizard.includes(s), s)
+  assert.match(wizard, /CONSENT_DOCUMENTS/)
+  assert.match(wizard, /grabacion_consentimiento/)
 })
-await check('consentimiento .docx: ZIP válido (CRC) con las partes de Word y el texto completo', () => {
-  const files = unzip(docx.buildDocx(consent.CONSENT_BLOCKS))
-  assert.deepEqual(Object.keys(files).sort(), ['[Content_Types].xml', '_rels/.rels', 'word/document.xml'])
-  const xml = files['word/document.xml']
-  assert.match(xml, /^<\?xml[^>]*\?><w:document /)
-  assert.ok(xml.includes('Consentimiento informado — BORRADOR') && xml.includes('w:highlight w:val="yellow"'))
-  assert.ok(xml.includes(consent.CONSENT_STATEMENTS.uso_anonimo) && !/<(?!\/?w:|\?xml)[^>]*>/.test(xml.replace(/&lt;|&gt;/g, '')))
+const obj01Ref = { id: 'OBJ-01', pista: 'objetivo', tipo: 'imagen', estado_estimulos: 'por_definir', ejecutable_formal: false, requiere_estimulo: true }
+await check('piloto: las actividades con audio se ejecutan como ensayo', () => {
+  const r = m.executionRule(obj01Ref, 'piloto', false)
+  assert.deepEqual([r.formal, r.ensayo], [false, true])
 })
 
 // ── Comprobaciones estáticas del código del cliente ──

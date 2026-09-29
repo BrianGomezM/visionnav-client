@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Header, type Tab } from '@/components/layout/header'
 import { SettingsPanel } from '@/components/layout/settings-panel'
 import { DetectTab } from '@/components/tabs/detect-tab'
@@ -10,12 +10,21 @@ import { MetricsTab } from '@/components/tabs/metrics-tab'
 import { DatasetTab } from '@/components/tabs/dataset-tab'
 import { StudyTab } from '@/components/tabs/study-tab'
 import { useApiConfig } from '@/hooks/use-api-config'
+import { useBackendProfile } from '@/hooks/use-backend-profile'
 
 export default function VisionNavApp() {
   const [activeTab, setActiveTab] = useState<Tab>('detect')
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   const { config, isLoaded, isEnvUrl, updateConfig, resetConfig } = useApiConfig()
+  // /api/debug-detect solo existe en development: fuera de él la pestaña Pipeline no se muestra.
+  const { profile } = useBackendProfile(config.baseUrl)
+  const hiddenTabs: Tab[] = profile && profile !== 'development' ? ['debug'] : []
+  const debugHidden = hiddenTabs.includes('debug')
+
+  useEffect(() => {
+    if (debugHidden) setActiveTab((t) => (t === 'debug' ? 'detect' : t))
+  }, [debugHidden])
 
   if (!isLoaded) {
     return (
@@ -33,6 +42,7 @@ export default function VisionNavApp() {
         onTabChange={setActiveTab}
         onSettingsClick={() => setIsSettingsOpen(!isSettingsOpen)}
         isSettingsOpen={isSettingsOpen}
+        hiddenTabs={hiddenTabs}
       />
 
       {/* ── Panel de configuración deslizante ── */}

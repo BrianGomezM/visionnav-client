@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { fetchStoredAudio, friendlyError } from '@/hooks/use-study'
+import { fetchConsentAudio, fetchStoredAudio, friendlyError } from '@/hooks/use-study'
 import type { SessionDetail } from '@/hooks/use-study'
 import type { StudyResponseRecord } from '@/lib/study-protocol'
 
@@ -33,6 +33,54 @@ function StoredAudio({ baseUrl, sessionId, r, tipo }: { baseUrl: string; session
   )
 }
 
+/** Consentimiento registrado: documento, afirmaciones y grabación de su lectura. */
+function ConsentSummary({ baseUrl, detail }: { baseUrl: string; detail: SessionDetail }) {
+  const { sesion } = detail
+  const c = sesion.consentimiento
+  const g = c.grabacion ?? null
+  const [url, setUrl] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <div className="rounded-lg border border-border p-3 text-sm space-y-1">
+      <p>
+        <span className="text-muted-foreground">Consentimiento: </span>
+        {c.version ?? c.formato_referencia ?? 'formato anterior'} · otorgado el {new Date(c.registrado_en).toLocaleString('es-CO')}
+        {c.version ? ' · las 4 afirmaciones respondidas «sí»' : ''}
+      </p>
+      {g ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground">Grabación de la lectura:</span>
+          {g.duracion_s !== null && <span>{Math.floor(g.duracion_s / 60)} min {Math.round(g.duracion_s % 60)} s</span>}
+          {g.almacenada ? (
+            url ? (
+              <audio controls src={url} aria-label="Grabación del consentimiento" className="h-8" />
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    setUrl(await fetchConsentAudio(baseUrl, sesion.session_id))
+                  } catch (e) {
+                    setError(friendlyError(e))
+                  }
+                }}
+              >
+                Escuchar
+              </Button>
+            )
+          ) : (
+            <span>no almacenada (prueba técnica sin DATA_ROOT; solo se guarda su huella)</span>
+          )}
+          {error && <span role="alert" className="text-xs text-[#B42318]">{error}</span>}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">Sesión del formato anterior: sin grabación del consentimiento.</p>
+      )}
+    </div>
+  )
+}
+
 /** Resultados recuperados del servidor: resumen descriptivo + una fila por respuesta. */
 export function SessionResults({ baseUrl, detail }: { baseUrl: string; detail: SessionDetail }) {
   const { sesion, respuestas, resumen } = detail
@@ -41,6 +89,7 @@ export function SessionResults({ baseUrl, detail }: { baseUrl: string; detail: S
       <h3 id="results-title" className="font-medium">
         Resultados de {sesion.codigo} {sesion.estado === 'finalizada' ? '(sesión finalizada)' : '(en curso)'}
       </h3>
+      <ConsentSummary baseUrl={baseUrl} detail={detail} />
       <dl className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
         {(
           [

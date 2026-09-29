@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, CheckCircle2, ClipboardList, Flag, ListChecks, PlayCircle, RefreshCw, Trash2, UserPlus, Users } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CheckCircle2, ClipboardList, Flag, ListChecks, PlayCircle, RefreshCw, Trash2, UserPlus, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -21,7 +21,8 @@ import { SessionWizard } from '@/components/study/session-wizard'
 import { TestRunner } from '@/components/study/test-runner'
 import { SessionClose } from '@/components/study/session-close'
 import { SessionResults } from '@/components/study/session-results'
-import { ConsentDownloadButton } from '@/components/study/consent-document'
+import { ConsentDownloadLinks } from '@/components/study/consent-document'
+import { TestInfo } from '@/components/study/test-info'
 import { primaryButtonClass } from '@/components/study/form-controls'
 import { TRACK_LABEL, executionRule, type SessionListItem } from '@/lib/study-protocol'
 import { cn } from '@/lib/utils'
@@ -37,10 +38,14 @@ type View = 'list' | 'wizard' | 'session' | 'close' | 'results'
  * Evaluación con usuarios (Objetivo 3). Instrumento operado por el investigador:
  * el participante escucha el audio de la API y responde verbalmente.
  *
- * Flujo: ficha → consentimiento → autorización de grabación → contexto →
- * selección de prueba (catálogo del backend) → estímulo → detección → narrativa →
- * audio y repeticiones → respuestas → errores → escalas → observaciones →
- * guardar → siguiente prueba → finalizar → resultados.
+ * Flujo: participante (ficha y contexto) → consentimiento (lectura grabada + 4
+ * afirmaciones) → confirmar → selección de prueba (catálogo del backend) → estímulo →
+ * detección → narrativa → audio y repeticiones → respuestas → errores → escalas →
+ * observaciones → guardar → siguiente prueba → finalizar → resultados.
+ *
+ * Piloto: ejecuta las mismas actividades con audio (como ensayo, con imágenes del
+ * Dataset 1) y después las preguntas sobre el procedimiento (PIL-*), como describe su
+ * consentimiento.
  */
 export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
   const sessions = useStudySessions(baseUrl, isActive)
@@ -83,6 +88,9 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
   )
   const formalTests = trackTests.filter((t) => t.ejecutable_formal)
   const selectedTest = [...trackTests, ...otherTrackTests].find((t) => t.id === selectedTestId) ?? null
+  // Orden de ejecución: en piloto, primero las actividades con audio y luego la encuesta.
+  const isPilot = sesion?.tipo_participante === 'piloto'
+  const orderedTests = isPilot ? [...otherTrackTests, ...trackTests] : [...trackTests, ...otherTrackTests]
 
   const openSession = (id: string, v: View = 'session') => {
     setActiveId(id)
@@ -91,16 +99,17 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
   }
 
   const goNext = () => {
-    // Primero las formales pendientes; si no quedan (p. ej. estímulos POR_DEFINIR en una
-    // sesión piloto o PTEST), la siguiente prueba de la pista que admita ensayo.
-    const idx = trackTests.findIndex((t) => t.id === selectedTestId)
+    // La siguiente prueba ejecutable después de la actual (en el orden de la sesión); si no
+    // queda ninguna, la primera formal pendiente.
+    if (!sesion) return
+    const runnable = (t: CatalogUserTest) => {
+      const r = executionRule(t, sesion.tipo_participante, sesion.es_prueba_tecnica)
+      return (r.formal && !formalDone.has(t.id)) || (!r.formal && r.ensayo)
+    }
+    const idx = orderedTests.findIndex((t) => t.id === selectedTestId)
     const pending =
-      formalTests.find((t) => !formalDone.has(t.id) && t.id !== selectedTestId) ??
-      (sesion
-        ? trackTests
-            .slice(idx + 1)
-            .find((t) => executionRule(t, sesion.tipo_participante, sesion.es_prueba_tecnica).ensayo)
-        : undefined)
+      orderedTests.slice(idx + 1).find(runnable) ??
+      formalTests.find((t) => !formalDone.has(t.id) && t.id !== selectedTestId)
     setSelectedTestId(pending?.id ?? null)
     setRunnerKey((k) => k + 1)
     setAnnounce(pending ? `Siguiente prueba: ${pending.id}` : 'No quedan pruebas pendientes en esta sesión.')
@@ -155,7 +164,13 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
             <Button onClick={() => setView('wizard')} disabled={keyMissing} className={`gap-2 ${primaryButtonClass}`}>
               <UserPlus className="w-4 h-4" aria-hidden="true" /> Nueva sesión
             </Button>
-            <ConsentDownloadButton />
+          </div>
+        )}
+        {view !== 'wizard' && (
+          <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+            <p className="text-sm font-medium text-foreground">Consentimientos informados (formato impreso)</p>
+            <ConsentDownloadLinks tipo="piloto" withLabel />
+            <ConsentDownloadLinks tipo="objetivo" withLabel />
           </div>
         )}
 
@@ -327,9 +342,9 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
   const renderTest = (t: CatalogUserTest) => {
     const rule = executionRule(t, sesion.tipo_participante, sesion.es_prueba_tecnica)
     const done = formalDone.has(t.id)
-    const estado = done ? 'Registrada' : rule.formal ? 'Disponible (formal)' : rule.ensayo ? 'Solo ensayo' : 'Pendiente: estímulo por definir'
+    const estado = done ? 'Registrada' : rule.formal ? 'Disponible (formal)' : rule.ensayo ? 'Ensayo (no es evidencia)' : 'Bloqueada: estímulo por definir'
     return (
-      <li key={t.id}>
+      <li key={t.id} className="flex items-start gap-1">
         <button
           type="button"
           onClick={() => {
@@ -338,7 +353,7 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
           }}
           aria-current={selectedTestId === t.id ? 'true' : undefined}
           className={cn(
-            'w-full text-left p-3 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4B45A8]',
+            'flex-1 min-w-0 text-left p-3 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4B45A8]',
             selectedTestId === t.id ? 'border-[#4B45A8] bg-[#EEEDFE]' : 'border-border bg-card hover:border-[#4B45A8]/60'
           )}
         >
@@ -348,11 +363,16 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
             </span>
             {done && <CheckCircle2 className="w-4 h-4 text-[#0F6E56] shrink-0" aria-hidden="true" />}
           </span>
-          <span className={cn('text-xs mt-0.5 block', rule.formal ? 'text-muted-foreground' : 'text-[#7A2E0E]')}>{estado}</span>
+          <span className={cn('text-xs mt-0.5 block', rule.formal || rule.ensayo ? 'text-muted-foreground' : 'text-[#7A2E0E]')}>
+            {estado}
+          </span>
         </button>
+        <TestInfo test={t} rule={rule} done={done} />
       </li>
     )
   }
+
+  const blockedFormal = !isPilot && trackTests.length > 0 && formalTests.length === 0
 
   return (
     <div className="space-y-6">
@@ -387,12 +407,33 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
         <nav aria-label="Pruebas del catálogo" className="space-y-3">
           {catalogApi.isLoading && <p className="text-sm text-muted-foreground" role="status">Cargando catálogo…</p>}
           {catalogApi.error && <ErrorCard message={`No se pudo cargar el catálogo de pruebas: ${catalogApi.error}`} />}
-          <ul className="space-y-2">{trackTests.map(renderTest)}</ul>
-          {otherTrackTests.length > 0 && (
-            <details>
-              <summary className="text-sm text-muted-foreground cursor-pointer">Pruebas de la otra pista (solo ensayo)</summary>
-              <ul className="space-y-2 mt-2">{otherTrackTests.map(renderTest)}</ul>
-            </details>
+          {blockedFormal && (
+            <div role="note" className="flex gap-2 p-3 rounded-lg bg-[#FFFAEB] border border-[#B54708]/30 text-[#7A2E0E] text-xs">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+              <p>
+                Ninguna prueba de esta pista tiene todavía imágenes asignadas en el catálogo del servidor
+                (catalog.yaml: estímulos POR DEFINIR). Por eso no se pueden registrar respuestas formales con
+                participantes objetivo hasta decidir qué escenas usa cada prueba.
+              </p>
+            </div>
+          )}
+          {isPilot ? (
+            <>
+              <h4 className="text-sm font-medium text-foreground">1. Actividades con audio (ensayo con imágenes del Dataset 1)</h4>
+              <ul className="space-y-2">{otherTrackTests.map(renderTest)}</ul>
+              <h4 className="text-sm font-medium text-foreground pt-2">2. Encuesta sobre el procedimiento</h4>
+              <ul className="space-y-2">{trackTests.map(renderTest)}</ul>
+            </>
+          ) : (
+            <>
+              <ul className="space-y-2">{trackTests.map(renderTest)}</ul>
+              {otherTrackTests.length > 0 && (
+                <details>
+                  <summary className="text-sm text-muted-foreground cursor-pointer">Pruebas de la otra pista (solo ensayo)</summary>
+                  <ul className="space-y-2 mt-2">{otherTrackTests.map(renderTest)}</ul>
+                </details>
+              )}
+            </>
           )}
         </nav>
 

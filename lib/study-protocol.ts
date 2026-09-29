@@ -57,23 +57,39 @@ export interface Contexto {
   entorno_tecnico: EntornoTecnico | null
 }
 
+/** Consentimiento verbal (§12 del documento): las cuatro afirmaciones son obligatorias. */
 export interface Consentimiento {
-  modalidad: 'verbal' | 'escrito'
-  comprende_y_acepta: boolean
-  puede_retirarse: boolean
-  uso_anonimo: boolean
-  formato_referencia: string | null
+  /** Versión del documento leído; el servidor exige la del tipo de participante. */
+  version: string
+  acepta_participar: boolean
+  puede_detenerse: boolean
+  autoriza_grabacion: boolean
+  autoriza_uso_academico: boolean
+}
+
+/** Grabación de la lectura del consentimiento (obligatoria, se envía al crear la sesión). */
+export interface GrabacionConsentimiento {
+  content_type: string
+  data_base64: string
+  duracion_s: number | null
 }
 
 export interface SessionCreatePayload {
   codigo: string
   tipo_participante: TipoParticipante
   ficha: Ficha
-  consentimiento: Consentimiento
-  grabacion: { autoriza_grabacion_audio: boolean }
   contexto: Contexto
-  investigador?: string
-  notas?: string
+  consentimiento: Consentimiento
+  grabacion_consentimiento: GrabacionConsentimiento
+}
+
+export interface GrabacionConsentimientoRecord {
+  archivo: string | null
+  almacenada: boolean
+  content_type: string
+  tamano_bytes: number
+  sha256: string
+  duracion_s: number | null
 }
 
 export interface Escalas {
@@ -94,11 +110,19 @@ export interface Sesion {
   creado: string
   estado: 'en_curso' | 'finalizada'
   ficha: Ficha
-  consentimiento: Consentimiento & { otorgado: boolean; registrado_en: string }
+  /** v3: cuatro afirmaciones + grabación. Las sesiones v2 tenían modalidad y tres afirmaciones. */
+  consentimiento: Partial<Consentimiento> & {
+    otorgado: boolean
+    registrado_en: string
+    documento?: TipoParticipante
+    modalidad?: string
+    formato_referencia?: string | null
+    grabacion?: GrabacionConsentimientoRecord | null
+  }
   grabacion: { autoriza_grabacion_audio: boolean; registrado_en: string }
   contexto: Contexto
-  investigador: string | null
-  notas: string | null
+  investigador?: string | null
+  notas?: string | null
   almacenamiento: string
   backend_commit: string | null
   cierre: null | {
@@ -346,7 +370,7 @@ export const EMPTY_ESCALAS: Escalas = {
 export const CODE_RE = /^P(TEST)?\d{2,3}$/
 export const TEST_CODE_RE = /^PTEST\d{2,3}$/
 
-/** Siguiente código libre (P01, P02… o PTEST01…), a partir de los ya usados. */
+/** Siguiente código libre (P01, P02… o PTEST01…), a partir de los ya usados (piloto y objetivo comparten la serie). */
 export function suggestNextCode(existing: string[], test = false): string {
   const prefix = test ? 'PTEST' : 'P'
   const re = test ? /^PTEST(\d{2,3})$/ : /^P(\d{2,3})$/
@@ -384,7 +408,7 @@ export function validateParticipant(codigo: string, tipo: TipoParticipante, fich
 }
 
 export function consentComplete(c: Consentimiento): boolean {
-  return c.comprende_y_acepta && c.puede_retirarse && c.uso_anonimo
+  return c.acepta_participar && c.puede_detenerse && c.autoriza_grabacion && c.autoriza_uso_academico
 }
 
 export function validateContext(c: Contexto): FieldErrors {
@@ -475,6 +499,12 @@ export interface ExecutionRule {
  */
 export function executionRule(test: CatalogTestLike, tipo: TipoParticipante, esPrueba: boolean): ExecutionRule {
   const ensayo = tipo === 'piloto' || esPrueba
+  if (tipo === 'piloto' && test.pista === 'objetivo')
+    return {
+      formal: false,
+      ensayo: true,
+      motivo: 'Actividad del procedimiento: en el piloto se ejecuta como ensayo, con imágenes del Dataset 1.',
+    }
   if (test.pista !== tipo)
     return {
       formal: false,

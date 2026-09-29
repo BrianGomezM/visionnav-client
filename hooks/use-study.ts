@@ -178,6 +178,13 @@ export async function fetchStimulusImage(baseUrl: string, imagenUrl: string): Pr
   return new File([blob], `${name}.png`, { type: blob.type || 'image/png' })
 }
 
+/** Grabación de la lectura del consentimiento (sesiones v3 con almacenamiento en el servidor). */
+export async function fetchConsentAudio(baseUrl: string, sessionId: string): Promise<string> {
+  const res = await apiFetch(`${baseUrl}/api/study/sessions/${encodeURIComponent(sessionId)}/consentimiento/audio`)
+  if (!res.ok) throw new ApiRequestError(await parseApiError(res))
+  return URL.createObjectURL(await res.blob())
+}
+
 /** Audio guardado de una respuesta (para escucharlo al revisar resultados). */
 export async function fetchStoredAudio(
   baseUrl: string,

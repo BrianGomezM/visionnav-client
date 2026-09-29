@@ -1,14 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeft, ArrowRight, UserPlus } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, Info, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorCard } from '@/components/shared/error-card'
 import {
   CheckboxGroupField,
   RadioGroupField,
-  TextAreaField,
   TextField,
   primaryButtonClass,
 } from '@/components/study/form-controls'
@@ -35,10 +34,11 @@ import {
   type SessionCreatePayload,
   type TipoParticipante,
 } from '@/lib/study-protocol'
-import { CONSENT_STATEMENTS, CONSENT_VERSION, RECORDING_STATEMENT } from '@/lib/consent'
-import { ConsentDownloadButton, ConsentText } from '@/components/study/consent-document'
+import { CONSENT_DOCUMENTS, CONSENT_KEYS, type ConsentKey } from '@/lib/consent'
+import { ConsentDownloadLinks, ConsentText } from '@/components/study/consent-document'
+import { AudioRecorder } from '@/components/study/participant-recorder'
 
-const STEPS =['Participante', 'Consentimiento', 'Grabación', 'Contexto de la sesión', 'Confirmar'] as const
+const STEPS = ['Participante', 'Consentimiento', 'Confirmar'] as const
 
 const EMPTY_FICHA: Ficha = {
   condicion_visual: { tipo_ceguera: 'congenita', etapa_adquisicion: null, experiencia_visual_previa: null },
@@ -46,18 +46,31 @@ const EMPTY_FICHA: Ficha = {
   experiencia_descripcion_audio: 'no_informa',
 }
 
-const EMPTY_CONSENT: Consentimiento = {
-  modalidad: 'verbal',
-  comprende_y_acepta: false,
-  puede_retirarse: false,
-  uso_anonimo: false,
-  // Trazabilidad: versión del texto leído (lib/consent.ts).
-  formato_referencia: CONSENT_VERSION,
+type Answer = 'si' | 'no'
+const EMPTY_ANSWERS: Record<ConsentKey, Answer | null> = {
+  acepta_participar: null,
+  puede_detenerse: null,
+  autoriza_grabacion: null,
+  autoriza_uso_academico: null,
+}
+
+const label = <T extends string>(opts: [T, string][], v: T | null | undefined) => opts.find(([k]) => k === v)?.[1] ?? '—'
+const fmtDuration = (s: number | null) => (s === null ? '—' : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`)
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result).split(',', 2)[1] ?? '')
+    r.onerror = () => reject(r.error)
+    r.readAsDataURL(blob)
+  })
 }
 
 /**
- * Registro de la sesión en 5 pasos. No se guarda NADA en el servidor hasta el
- * último paso, y el servidor rechaza la sesión sin consentimiento completo.
+ * Registro de la sesión en 3 pasos: participante (ficha y contexto de la sesión) →
+ * consentimiento (lectura grabada + 4 afirmaciones) → confirmar. No se guarda NADA en
+ * el servidor hasta el último paso; el servidor rechaza la sesión sin las cuatro
+ * afirmaciones o sin la grabación del consentimiento.
  */
 export function SessionWizard({
   existingCodes,
@@ -74,10 +87,11 @@ export function SessionWizard({
 }) {
   const [step, setStep] = useState(0)
   const [codigo, setCodigo] = useState(() => suggestNextCode(existingCodes))
-  const [tipo, setTipo] = useState<TipoParticipante>('objetivo')
+  const codeEdited = useRef(false)
+  const [tipo, setTipo] = useState<TipoParticipante | null>(null)
   const [ficha, setFicha] = useState<Ficha>(EMPTY_FICHA)
-  const [consent, setConsent] = useState<Consentimiento>(EMPTY_CONSENT)
-  const [grabacion, setGrabacion] = useState<boolean | null>(null)
+  const [answers, setAnswers] = useState(EMPTY_ANSWERS)
+  const [recording, setRecording] = useState<{ blob: Blob; duration: number | null } | null>(null)
   const [contexto, setContexto] = useState<Contexto>({
     dispositivo: 'computador',
     dispositivo_otro: null,
@@ -85,10 +99,14 @@ export function SessionWizard({
     reproduccion_otro: null,
     entorno_tecnico: null,
   })
-  const [investigador, setInvestigador] = useState('')
-  const [notas, setNotas] = useState('')
   const [showErrors, setShowErrors] = useState(false)
+  const [encoding, setEncoding] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
+
+  // El código se asigna solo (siguiente libre) mientras el investigador no lo edite.
+  useEffect(() => {
+    if (!codeEdited.current) setCodigo(suggestNextCode(existingCodes))
+  }, [existingCodes])
 
   useEffect(() => {
     // Entorno técnico: lo registra el navegador (no se pregunta al participante).
@@ -99,8 +117,10 @@ export function SessionWizard({
     headingRef.current?.focus()
   }, [step])
 
-  // En piloto no hay ceguera; en objetivo no se admite "no aplica".
+  // En piloto no hay ceguera; en objetivo no se admite "no aplica". Cada tipo tiene su
+  // propio consentimiento: al cambiar de tipo se descartan respuestas y grabación.
   useEffect(() => {
+    if (!tipo) return
     setFicha((f) => ({
       ...f,
       condicion_visual:
@@ -110,18 +130,30 @@ export function SessionWizard({
             ? { ...EMPTY_FICHA.condicion_visual }
             : f.condicion_visual,
     }))
+    setAnswers(EMPTY_ANSWERS)
+    setRecording(null)
   }, [tipo])
 
-  const participantErrors = validateParticipant(codigo, tipo, ficha)
+  const participantErrors = tipo ? validateParticipant(codigo, tipo, ficha) : { tipo: 'Seleccione el tipo de participante.' }
   const duplicate = existingCodes.includes(codigo)
   if (duplicate) participantErrors.codigo = 'Ese código ya tiene una sesión: recupérela desde la lista.'
   const contextErrors = validateContext(contexto)
 
+  const doc = tipo ? CONSENT_DOCUMENTS[tipo] : null
+  const consent: Consentimiento | null = doc
+    ? {
+        version: doc.version,
+        acepta_participar: answers.acepta_participar === 'si',
+        puede_detenerse: answers.puede_detenerse === 'si',
+        autoriza_grabacion: answers.autoriza_grabacion === 'si',
+        autoriza_uso_academico: answers.autoriza_uso_academico === 'si',
+      }
+    : null
+  const anyNo = CONSENT_KEYS.some((k) => answers[k] === 'no')
+
   const stepValid = [
-    Object.keys(participantErrors).length === 0,
-    consentComplete(consent),
-    grabacion !== null,
-    Object.keys(contextErrors).length === 0,
+    Object.keys(participantErrors).length === 0 && Object.keys(contextErrors).length === 0,
+    Boolean(consent && consentComplete(consent) && recording),
     true,
   ]
 
@@ -140,21 +172,32 @@ export function SessionWizard({
   const setCv = (u: Partial<Ficha['condicion_visual']>) => setFicha((f) => ({ ...f, condicion_visual: { ...f.condicion_visual, ...u } }))
   const setTec = (u: Partial<Ficha['tecnologias']>) => setFicha((f) => ({ ...f, tecnologias: { ...f.tecnologias, ...u } }))
 
-  const submit = () =>
-    onCreate({
-      codigo,
-      tipo_participante: tipo,
-      ficha: normalizeFicha(ficha),
-      consentimiento: { ...consent, formato_referencia: consent.formato_referencia?.trim() || null },
-      grabacion: { autoriza_grabacion_audio: grabacion === true },
-      contexto: {
-        ...contexto,
-        dispositivo_otro: contexto.dispositivo === 'otro' ? contexto.dispositivo_otro : null,
-        reproduccion_otro: contexto.reproduccion_audio === 'otro' ? contexto.reproduccion_otro : null,
-      },
-      investigador: investigador.trim() || undefined,
-      notas: notas.trim() || undefined,
-    })
+  const submit = async () => {
+    if (!tipo || !consent || !recording) return
+    setEncoding(true)
+    try {
+      onCreate({
+        codigo,
+        tipo_participante: tipo,
+        ficha: normalizeFicha(ficha),
+        contexto: {
+          ...contexto,
+          dispositivo_otro: contexto.dispositivo === 'otro' ? contexto.dispositivo_otro : null,
+          reproduccion_otro: contexto.reproduccion_audio === 'otro' ? contexto.reproduccion_otro : null,
+        },
+        consentimiento: consent,
+        grabacion_consentimiento: {
+          content_type: recording.blob.type || 'audio/webm',
+          data_base64: await blobToBase64(recording.blob),
+          duracion_s: recording.duration,
+        },
+      })
+    } finally {
+      setEncoding(false)
+    }
+  }
+
+  const lectoresUsados = tec.lectores_pantalla.filter((l) => l !== 'no_utiliza')
 
   return (
     <section className="rounded-xl border border-border bg-card p-6 shadow-sm space-y-5" aria-labelledby="wizard-title">
@@ -193,36 +236,38 @@ export function SessionWizard({
         Paso {step + 1} de {STEPS.length}: {STEPS[step]}
       </h4>
 
-      {/* ── Paso 1: identificación + ficha mínima ── */}
+      {/* ── Paso 1: participante, ficha mínima y contexto de la sesión ── */}
       {step === 0 && (
         <div className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
-            <TextField
-              label="Código del participante"
-              value={codigo}
-              onChange={(v) => setCodigo(v.toUpperCase().trim())}
-              required
-              error={showErrors || duplicate ? participantErrors.codigo : undefined}
-              hint="Anonimizado (P01, P02…). PTEST01… solo para pruebas técnicas. La correspondencia con la persona se guarda fuera del sistema."
-            />
             <RadioGroupField
               legend="Tipo de participante"
               name="tipo"
-              options={[['objetivo', TRACK_LABEL.objetivo], ['piloto', TRACK_LABEL.piloto]]}
+              options={[['piloto', TRACK_LABEL.piloto], ['objetivo', TRACK_LABEL.objetivo]]}
               value={tipo}
               onChange={setTipo}
               inline={false}
               required
-              hint={tipo === 'piloto' ? 'El piloto valida procedimiento, duración e instrumento; no es evidencia de accesibilidad.' : undefined}
+              error={err(participantErrors, 'tipo')}
+              hint={
+                tipo === 'piloto'
+                  ? 'Valida el procedimiento con las mismas actividades (como ensayo) y una encuesta final. No es evidencia de accesibilidad.'
+                  : tipo === 'objetivo'
+                    ? 'Persona con ceguera total: sus respuestas formales son la evidencia del Objetivo 3.'
+                    : 'Determina el consentimiento que se lee y las pruebas de la sesión.'
+              }
             />
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs">
-            <Button type="button" variant="outline" size="sm" onClick={() => setCodigo(suggestNextCode(existingCodes))}>
-              Sugerir código de participante
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setCodigo(suggestNextCode(existingCodes, true))}>
-              Sugerir código de prueba técnica
-            </Button>
+            <TextField
+              label="Código del participante"
+              value={codigo}
+              onChange={(v) => {
+                codeEdited.current = true
+                setCodigo(v.toUpperCase().trim())
+              }}
+              required
+              error={showErrors || duplicate ? participantErrors.codigo : undefined}
+              hint="Asignado automáticamente (siguiente código libre). El nombre solo va en el formato impreso del consentimiento."
+            />
           </div>
 
           {tipo === 'objetivo' && (
@@ -319,165 +364,163 @@ export function SessionWizard({
               required
             />
           </div>
-        </div>
-      )}
 
-      {/* ── Paso 2: consentimiento ── */}
-      {step === 1 && (
-        <div className="space-y-4">
-          <div role="note" className="flex gap-2 p-3 rounded-lg bg-[#FFFAEB] border border-[#B54708]/30 text-[#7A2E0E] text-xs">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
-            <p>
-              <strong>Borrador pendiente de revisión de los directores (doc. 27, §L y §W):</strong> el texto es una
-              adaptación a este protocolo del formato de otro estudio (tareas físicas, audio y video). No está aprobado y
-              no se ha verificado si se requiere aprobación ética institucional. Aquí solo se registra lo que el
-              investigador leyó y lo que el participante respondió.
-            </p>
-          </div>
-          <ConsentText />
-          <ConsentDownloadButton />
-          <RadioGroupField
-            legend="Modalidad del consentimiento"
-            name="modalidad"
-            options={[['verbal', 'Verbal (leído en voz alta)'], ['escrito', 'Escrito']]}
-            value={consent.modalidad}
-            onChange={(v) => setConsent((c) => ({ ...c, modalidad: v }))}
-            required
-          />
-          <fieldset className="space-y-2" aria-describedby="consent-hint">
-            <legend className="text-sm font-medium text-foreground">
-              Respuesta del participante a cada afirmación (debe ser &quot;sí&quot; en todas)
-            </legend>
-            {(Object.entries(CONSENT_STATEMENTS) as [keyof typeof CONSENT_STATEMENTS, string][]).map(([k, text], i) => (
-              <label key={k} className="flex items-start gap-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="mt-1 accent-[#4B45A8]"
-                  checked={consent[k]}
-                  onChange={(e) => setConsent((c) => ({ ...c, [k]: e.target.checked }))}
-                />
-                <span>
-                  {i + 1}. {text}
-                </span>
-              </label>
-            ))}
-            <p id="consent-hint" className="text-xs text-muted-foreground">
-              La grabación de audio se registra aparte, en el paso siguiente.
-            </p>
-            {showErrors && !consentComplete(consent) && (
-              <p className="text-xs text-[#B42318]">Sin las tres respuestas afirmativas no se puede iniciar la sesión.</p>
+          <div className="space-y-3 rounded-lg border border-border p-4">
+            <p className="text-sm font-medium text-foreground">Condiciones de esta sesión</p>
+            <RadioGroupField
+              legend="Dispositivo utilizado en esta sesión"
+              name="dispositivo"
+              options={DISPOSITIVO_OPTS}
+              value={contexto.dispositivo}
+              onChange={(v) => setContexto((c) => ({ ...c, dispositivo: v }))}
+              required
+            />
+            {contexto.dispositivo === 'otro' && (
+              <TextField
+                label="Otro dispositivo"
+                value={contexto.dispositivo_otro ?? ''}
+                onChange={(v) => setContexto((c) => ({ ...c, dispositivo_otro: v }))}
+                error={err(contextErrors, 'dispositivo_otro')}
+                required
+              />
             )}
-          </fieldset>
-          <TextField
-            label="Referencia del formato usado (opcional)"
-            value={consent.formato_referencia ?? ''}
-            onChange={(v) => setConsent((c) => ({ ...c, formato_referencia: v }))}
-            hint="Se completa con la versión del texto leído. No escriba aquí el nombre del participante."
-          />
-        </div>
-      )}
-
-      {/* ── Paso 3: autorización de grabación ── */}
-      {step === 2 && (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Distinga: el <strong>audio de la narrativa</strong> lo genera la API y siempre se guarda con la respuesta
-            (es el estímulo). La <strong>grabación del participante</strong> es su voz y solo se guarda si autoriza
-            aquí y el servidor almacena fuera del repositorio (DATA_ROOT).
-          </p>
-          <p className="text-sm">
-            <strong>Afirmación 4 (opcional):</strong> {RECORDING_STATEMENT}
-          </p>
-          <RadioGroupField
-            legend="¿El participante autoriza grabar el audio de sus respuestas?"
-            name="grabacion"
-            options={[['si', 'Sí, autoriza'], ['no', 'No autoriza']]}
-            value={grabacion === null ? null : grabacion ? 'si' : 'no'}
-            onChange={(v) => setGrabacion(v === 'si')}
-            error={showErrors && grabacion === null ? 'Registre la respuesta del participante.' : undefined}
-            required
-            hint="Pendiente de confirmar con los directores si el consentimiento cubre la grabación y quién accede a ella."
-          />
-        </div>
-      )}
-
-      {/* ── Paso 4: contexto técnico ── */}
-      {step === 3 && (
-        <div className="space-y-4">
-          <RadioGroupField
-            legend="Dispositivo utilizado en esta sesión"
-            name="dispositivo"
-            options={DISPOSITIVO_OPTS}
-            value={contexto.dispositivo}
-            onChange={(v) => setContexto((c) => ({ ...c, dispositivo: v }))}
-            required
-          />
-          {contexto.dispositivo === 'otro' && (
-            <TextField
-              label="Otro dispositivo"
-              value={contexto.dispositivo_otro ?? ''}
-              onChange={(v) => setContexto((c) => ({ ...c, dispositivo_otro: v }))}
-              error={err(contextErrors, 'dispositivo_otro')}
+            <RadioGroupField
+              legend="Reproducción del audio"
+              name="reproduccion"
+              options={REPRODUCCION_OPTS}
+              value={contexto.reproduccion_audio}
+              onChange={(v) => setContexto((c) => ({ ...c, reproduccion_audio: v }))}
               required
             />
-          )}
-          <RadioGroupField
-            legend="Reproducción del audio"
-            name="reproduccion"
-            options={REPRODUCCION_OPTS}
-            value={contexto.reproduccion_audio}
-            onChange={(v) => setContexto((c) => ({ ...c, reproduccion_audio: v }))}
-            required
-          />
-          {contexto.reproduccion_audio === 'otro' && (
-            <TextField
-              label="Otro método de reproducción"
-              value={contexto.reproduccion_otro ?? ''}
-              onChange={(v) => setContexto((c) => ({ ...c, reproduccion_otro: v }))}
-              error={err(contextErrors, 'reproduccion_otro')}
-              required
-            />
-          )}
-          <div className="rounded-lg bg-muted/30 p-3 text-xs text-muted-foreground">
-            <p className="font-medium text-foreground">Registrado automáticamente por el navegador</p>
-            <p>
-              {contexto.entorno_tecnico?.navegador ?? 'Navegador desconocido'} ·{' '}
-              {contexto.entorno_tecnico?.sistema_operativo ?? 'SO desconocido'} ·{' '}
-              {contexto.entorno_tecnico?.tipo_dispositivo ?? '—'}
+            {contexto.reproduccion_audio === 'otro' && (
+              <TextField
+                label="Otro método de reproducción"
+                value={contexto.reproduccion_otro ?? ''}
+                onChange={(v) => setContexto((c) => ({ ...c, reproduccion_otro: v }))}
+                error={err(contextErrors, 'reproduccion_otro')}
+                required
+              />
+            )}
+            <p className="text-xs text-muted-foreground">
+              Registrado automáticamente por el navegador: {contexto.entorno_tecnico?.navegador ?? 'navegador desconocido'} ·{' '}
+              {contexto.entorno_tecnico?.sistema_operativo ?? 'SO desconocido'} · {contexto.entorno_tecnico?.tipo_dispositivo ?? '—'}
             </p>
           </div>
-          <TextField
-            label="Investigador (iniciales o código, opcional)"
-            value={investigador}
-            onChange={setInvestigador}
-          />
-          <TextAreaField
-            label="Notas de la sesión (opcional)"
-            value={notas}
-            onChange={setNotas}
-            hint="No incluya nombres ni datos que identifiquen al participante."
-          />
         </div>
       )}
 
-      {/* ── Paso 5: confirmar ── */}
-      {step === 4 && (
-        <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          <dt className="text-muted-foreground">Código</dt>
-          <dd className="font-medium">
-            {codigo} {TEST_CODE_RE.test(codigo) && <span className="text-xs">(prueba técnica)</span>}
-          </dd>
-          <dt className="text-muted-foreground">Tipo</dt>
-          <dd>{TRACK_LABEL[tipo]}</dd>
-          <dt className="text-muted-foreground">Consentimiento</dt>
-          <dd>Otorgado ({consent.modalidad})</dd>
-          <dt className="text-muted-foreground">Grabación del participante</dt>
-          <dd>{grabacion ? 'Autorizada' : 'No autorizada: no se grabará'}</dd>
-          <dt className="text-muted-foreground">Dispositivo / audio</dt>
-          <dd>
-            {contexto.dispositivo} · {contexto.reproduccion_audio}
-          </dd>
-        </dl>
+      {/* ── Paso 2: consentimiento leído en voz alta y grabado ── */}
+      {/* Se mantiene montado (oculto) para no perder la grabación al volver al paso 1. */}
+      {tipo && doc && (
+        <div className="space-y-4" hidden={step !== 1}>
+          <div className="flex gap-2 p-3 rounded-lg bg-[#EEEDFE] text-[#2E2A6B] text-sm">
+            <Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <ol className="list-decimal pl-4 space-y-0.5">
+              <li>Pida permiso verbal para grabar la lectura del consentimiento.</li>
+              <li>Pulse «Grabar lectura del consentimiento» y lea el texto completo en voz alta.</li>
+              <li>Lea cada afirmación del §12 y registre abajo la respuesta del participante.</li>
+              <li>Detenga la grabación. Complete y firme el formato impreso (nombre, código, lugar y fecha).</li>
+            </ol>
+          </div>
+
+          <AudioRecorder
+            key={tipo}
+            title="Grabación de la lectura del consentimiento (obligatoria)"
+            startLabel="Grabar lectura del consentimiento"
+            readyText="Grabación lista: se guarda al crear la sesión."
+            onChange={(blob, duration) => setRecording(blob ? { blob, duration } : null)}
+          />
+          {showErrors && !recording && (
+            <p className="text-xs text-[#B42318]">Sin la grabación del consentimiento no se puede crear la sesión.</p>
+          )}
+
+          <ConsentText tipo={tipo} />
+          <ConsentDownloadLinks tipo={tipo} />
+
+          <div className="space-y-3 rounded-lg border border-border p-4">
+            <p className="text-sm font-medium text-foreground">
+              Respuesta del participante a cada afirmación (todas deben ser «sí» para participar)
+            </p>
+            {CONSENT_KEYS.map((k, i) => (
+              <RadioGroupField
+                key={k}
+                legend={`${i + 1}. ${doc.afirmaciones[k]}`}
+                name={`afirmacion-${k}`}
+                options={[['si', 'Sí'], ['no', 'No']]}
+                value={answers[k]}
+                onChange={(v) => setAnswers((a) => ({ ...a, [k]: v }))}
+                error={showErrors && answers[k] === null ? 'Registre la respuesta del participante.' : undefined}
+                required
+              />
+            ))}
+            {anyNo && (
+              <div role="alert" className="flex gap-2 p-3 rounded-lg bg-[#FEF3F2] text-[#912018] text-sm">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <p>
+                  Con una respuesta «no» la persona no puede participar (la grabación es condición del §5). No se crea la sesión:
+                  use «Cancelar».
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Paso 3: confirmar ── */}
+      {step === 2 && tipo && doc && consent && (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Revise con el participante los datos registrados antes de iniciar. Para corregir algo use «Anterior».
+          </p>
+          <dl className="grid sm:grid-cols-[14rem_1fr] gap-x-6 gap-y-2 text-sm rounded-lg border border-border p-4">
+            <dt className="text-muted-foreground">Código</dt>
+            <dd className="font-medium">
+              {codigo} {TEST_CODE_RE.test(codigo) && <span className="text-xs">(prueba técnica)</span>}
+            </dd>
+            <dt className="text-muted-foreground">Tipo de participante</dt>
+            <dd>{TRACK_LABEL[tipo]}</dd>
+            {tipo === 'objetivo' && (
+              <>
+                <dt className="text-muted-foreground">Condición visual</dt>
+                <dd>
+                  Ceguera {label(CEGUERA_OPTS, cv.tipo_ceguera).toLowerCase()}
+                  {cv.tipo_ceguera === 'adquirida' && ` (${label(ETAPA_OPTS, cv.etapa_adquisicion).toLowerCase()})`} · experiencia
+                  visual previa: {label(SINO_OPTS, cv.experiencia_visual_previa).toLowerCase()}
+                </dd>
+              </>
+            )}
+            <dt className="text-muted-foreground">Tecnologías habituales</dt>
+            <dd>
+              {tec.utiliza.map((t) => (t === 'otra' ? tec.otra_descripcion : label(TECNOLOGIA_OPTS, t))).join(', ')}
+              {lectoresUsados.length > 0 &&
+                ` · lector: ${lectoresUsados.map((l) => (l === 'otro' ? tec.lector_otro : label(LECTOR_OPTS, l))).join(', ')}`}
+              {tec.frecuencia_uso && ` · ${label(FRECUENCIA_OPTS, tec.frecuencia_uso).toLowerCase()}`}
+            </dd>
+            <dt className="text-muted-foreground">Descripción de imágenes por audio</dt>
+            <dd>{label(SINO_OPTS, ficha.experiencia_descripcion_audio)}</dd>
+            <dt className="text-muted-foreground">Dispositivo / audio</dt>
+            <dd>
+              {contexto.dispositivo === 'otro' ? contexto.dispositivo_otro : label(DISPOSITIVO_OPTS, contexto.dispositivo)} ·{' '}
+              {contexto.reproduccion_audio === 'otro' ? contexto.reproduccion_otro : label(REPRODUCCION_OPTS, contexto.reproduccion_audio)}
+            </dd>
+            <dt className="text-muted-foreground">Consentimiento leído</dt>
+            <dd>{doc.version}</dd>
+            {CONSENT_KEYS.map((k, i) => (
+              <div key={k} className="contents">
+                <dt className="text-muted-foreground">Afirmación {i + 1}</dt>
+                <dd>
+                  <strong>Sí</strong> — {doc.afirmaciones[k]}
+                </dd>
+              </div>
+            ))}
+            <dt className="text-muted-foreground">Grabación del consentimiento</dt>
+            <dd>
+              {recording ? `${fmtDuration(recording.duration)} · ${(recording.blob.size / 1024).toFixed(0)} KB` : 'Falta'}
+            </dd>
+            <dt className="text-muted-foreground">Grabación de respuestas</dt>
+            <dd>Autorizada (afirmación 3)</dd>
+          </dl>
+        </div>
       )}
 
       {error && <ErrorCard message={error} />}
@@ -487,12 +530,12 @@ export function SessionWizard({
           <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Anterior
         </Button>
         {step < STEPS.length - 1 ? (
-          <Button onClick={next} className={`gap-2 ${primaryButtonClass}`}>
+          <Button onClick={next} disabled={step === 1 && anyNo} className={`gap-2 ${primaryButtonClass}`}>
             Siguiente <ArrowRight className="w-4 h-4" aria-hidden="true" />
           </Button>
         ) : (
-          <Button onClick={submit} disabled={isCreating} className={`gap-2 ${primaryButtonClass}`}>
-            {isCreating ? (
+          <Button onClick={submit} disabled={isCreating || encoding} className={`gap-2 ${primaryButtonClass}`}>
+            {isCreating || encoding ? (
               <>
                 <Spinner className="w-4 h-4" /> Creando sesión…
               </>

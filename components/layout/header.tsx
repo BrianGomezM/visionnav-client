@@ -30,6 +30,8 @@ interface HeaderProps {
   onTabChange: (tab: Tab) => void
   onSettingsClick: () => void
   isSettingsOpen: boolean
+  /** Pestañas que no existen en el perfil del backend (p. ej. Pipeline fuera de development). */
+  hiddenTabs?: Tab[]
 }
 
 const tabs: {
@@ -96,7 +98,9 @@ export function Header({
   onTabChange,
   onSettingsClick,
   isSettingsOpen,
+  hiddenTabs = [],
 }: HeaderProps) {
+  const visibleTabs = tabs.filter((t) => !hiddenTabs.includes(t.id))
   const [isDark, setIsDark] = useState(false)
 
   useEffect(() => {
@@ -134,7 +138,7 @@ export function Header({
             role="tablist"
             aria-label="Navegación principal"
           >
-            {tabs.map(({ id, label, Icon, tooltip, activeBg, activeText }) => (
+            {visibleTabs.map(({ id, label, Icon, tooltip, activeBg, activeText }) => (
               <Tooltip key={id}>
                 <TooltipTrigger asChild>
                   <button
@@ -208,7 +212,7 @@ export function Header({
           role="tablist"
           aria-label="Navegación principal"
         >
-          {tabs.map(({ id, label, Icon, activeBg, activeText }) => (
+          {visibleTabs.map(({ id, label, Icon, activeBg, activeText }) => (
             <button
               key={id}
               role="tab"
