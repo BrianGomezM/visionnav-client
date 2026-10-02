@@ -12,7 +12,9 @@ import {
   primaryButtonClass,
 } from '@/components/study/form-controls'
 import {
+  AUDICION_OPTS,
   CEGUERA_OPTS,
+  RANGO_EDAD_OPTS,
   DISPOSITIVO_OPTS,
   ETAPA_OPTS,
   FRECUENCIA_OPTS,
@@ -45,6 +47,8 @@ const EMPTY_FICHA: Ficha = {
   condicion_visual: { tipo_ceguera: 'congenita', etapa_adquisicion: null, experiencia_visual_previa: null },
   tecnologias: { utiliza: [], otra_descripcion: null, lectores_pantalla: [], lector_otro: null, frecuencia_uso: null },
   experiencia_descripcion_audio: 'no_informa',
+  rango_edad: null,
+  audicion_autodeclarada: null,
 }
 
 type Answer = 'si' | 'no'
@@ -393,6 +397,26 @@ export function SessionWizard({
               onChange={(v) => setFicha((f) => ({ ...f, experiencia_descripcion_audio: v }))}
               required
             />
+            <RadioGroupField
+              legend="Rango de edad"
+              name="rango-edad"
+              options={RANGO_EDAD_OPTS}
+              value={ficha.rango_edad ?? null}
+              onChange={(v) => setFicha((f) => ({ ...f, rango_edad: v }))}
+              error={err(participantErrors, 'rango_edad')}
+              hint="Solo el rango: la edad exacta no se registra."
+              required
+            />
+            <RadioGroupField
+              legend="¿Cómo escucha habitualmente? (autodeclarado)"
+              name="audicion"
+              options={AUDICION_OPTS}
+              value={ficha.audicion_autodeclarada ?? null}
+              onChange={(v) => setFicha((f) => ({ ...f, audicion_autodeclarada: v }))}
+              error={err(participantErrors, 'audicion_autodeclarada')}
+              hint="La actividad es auditiva. No se pide diagnóstico."
+              required
+            />
           </div>
 
           <div className="space-y-3 rounded-lg border border-border p-4">
@@ -581,6 +605,10 @@ export function SessionWizard({
             </dd>
             <dt className="text-muted-foreground">Descripción de imágenes por audio</dt>
             <dd>{label(SINO_OPTS, ficha.experiencia_descripcion_audio)}</dd>
+            <dt className="text-muted-foreground">Rango de edad / audición</dt>
+            <dd>
+              {label(RANGO_EDAD_OPTS, ficha.rango_edad)} · {label(AUDICION_OPTS, ficha.audicion_autodeclarada)}
+            </dd>
             <dt className="text-muted-foreground">Dispositivo / audio</dt>
             <dd>
               {contexto.dispositivo === 'otro' ? contexto.dispositivo_otro : label(DISPOSITIVO_OPTS, contexto.dispositivo)} ·{' '}

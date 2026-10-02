@@ -11,15 +11,16 @@ import {
   TextAreaField,
   primaryButtonClass,
 } from '@/components/study/form-controls'
-import { ANCLAS_PROVISIONALES, EMPTY_ESCALAS, ESCALAS, cleanEscalas, type Escalas } from '@/lib/study-protocol'
+import { ANCLAS_TEXTO, EMPTY_ESCALAS, ESCALAS, cleanEscalas, type Escalas } from '@/lib/study-protocol'
 import { SCALE_HELP } from '@/lib/study-help'
 
 type Motivo = 'completada' | 'retiro_participante' | 'interrumpida_tecnica'
 
 /**
- * Cierre de la sesión: cuestionario posterior (mismas escalas 1–5), notas de la
- * entrevista semiestructurada breve y registro técnico. Después la sesión no
- * admite respuestas nuevas.
+ * Cierre de la sesión: cuestionario posterior breve (solo claridad y esfuerzo: lo demás
+ * ya se preguntó en OBJ-05/06/07), notas de la entrevista semiestructurada breve y
+ * registro técnico (incluye lo que antes era PIL-03). Después la sesión no admite
+ * respuestas nuevas.
  */
 export function SessionClose({
   isLoading,
@@ -63,13 +64,16 @@ export function SessionClose({
         onChange={setMotivo}
       />
       <fieldset className="rounded-lg border border-border p-4">
-        <legend className="text-sm font-medium px-1">Cuestionario posterior (1–5, opcional)</legend>
-        <p className="text-xs text-muted-foreground">{ANCLAS_PROVISIONALES}</p>
+        <legend className="text-sm font-medium px-1">Cuestionario posterior (1–5)</legend>
+        <p className="text-xs text-muted-foreground">
+          Lea la pregunta y las cinco opciones: {ANCLAS_TEXTO}. Naturalidad, suficiencia, redundancia y utilidad ya se
+          preguntaron en OBJ-05, OBJ-06 y OBJ-07.
+        </p>
         {ESCALAS.map((e) => (
           <LikertField
             key={e.key}
             label={e.label}
-            hint={e.ayuda}
+            hint={SCALE_HELP[e.key]?.pregunta ? `«${SCALE_HELP[e.key].pregunta}»` : e.ayuda}
             info={SCALE_HELP[e.key]}
             value={escalas[e.key]}
             onChange={(v) => setEscalas((p) => ({ ...p, [e.key]: v }))}
@@ -84,7 +88,13 @@ export function SessionClose({
         rows={4}
         hint="Qué resultó confuso, qué faltó o sobró, sugerencias. Sin nombres."
       />
-      <TextAreaField label="Registro técnico: incidencias" value={incidencias} onChange={setIncidencias} rows={2} />
+      <TextAreaField
+        label="Registro técnico: incidencias"
+        value={incidencias}
+        onChange={setIncidencias}
+        rows={2}
+        hint="Fallas observadas en toda la sesión (audio que no carga, demoras, errores visibles), aunque el participante no las mencione."
+      />
       <TextAreaField label="Observaciones generales" value={observaciones} onChange={setObservaciones} rows={2} />
       {error && <ErrorCard message={error} />}
       <div className="flex justify-between gap-2">

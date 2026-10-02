@@ -1,7 +1,7 @@
 /**
  * Protocolo de la evaluación con usuarios (Objetivo 3) — lógica pura, sin React.
  *
- * Refleja el contrato v2 de /api/study/* (backend: app/routes/study.py,
+ * Refleja el contrato v3 de /api/study/* (backend: app/routes/study.py,
  * docs/EVALUACION_USUARIOS.md). El backend vuelve a validar todo: estas
  * funciones solo evitan enviar formularios incompletos y documentan las reglas
  * en el cliente. Verificación: node scripts/check-study.mjs
@@ -25,6 +25,11 @@ export type Reproduccion = 'audifonos' | 'parlantes' | 'otro'
 export type ModoRegistro = 'formal' | 'ensayo'
 export type SiNoReportada = 'si' | 'no' | 'no_reportada'
 export type Comprendida = 'si' | 'no' | 'no_evaluada'
+export type RangoEdad = '18_29' | '30_44' | '45_59' | '60_mas' | 'no_informa'
+export type Audicion = 'sin_dificultad' | 'con_dificultad' | 'no_informa'
+export type Codificacion = 'objetos' | 'relaciones' | 'ubicacion' | 'distancia' | 'cambio'
+export type PercepcionCambio = 'menciona_cambio_real' | 'no_menciona_cambio' | 'menciona_cambio_inexistente' | 'no_responde'
+export type TipoAclaracion = 'pregunta' | 'escala' | 'otra'
 
 export interface Ficha {
   condicion_visual: {
@@ -40,6 +45,9 @@ export interface Ficha {
     frecuencia_uso: Frecuencia | null
   }
   experiencia_descripcion_audio: SiNoNoInforma
+  /** Rango (nunca la edad exacta) y audición autodeclarada: obligatorios en sesiones nuevas. */
+  rango_edad?: RangoEdad | null
+  audicion_autodeclarada?: Audicion | null
 }
 
 export interface EntornoTecnico {
@@ -151,6 +159,9 @@ export interface ObjetoCodificado {
   identificado: boolean
   ubicacion_reportada: string | null
   ubicacion_correcta: SiNoReportada
+  /** OBJ-02: distancia que dijo el participante frente a la de la narrativa. */
+  distancia_reportada?: string | null
+  distancia_correcta?: SiNoReportada
 }
 
 export interface RelacionCodificada {
@@ -175,6 +186,12 @@ export interface PlayEvent {
   tipo: 'inicial' | 'repeticion'
 }
 
+/** Solicitud de aclaración del participante (indicador de claridad del guion). */
+export interface Aclaracion {
+  instante: string
+  tipo: TipoAclaracion
+}
+
 export interface Ejecucion {
   request_id: string | null
   narrativa_final: string
@@ -197,10 +214,18 @@ export interface DecisionPayload {
   coincide_con_narrativa: boolean | null
 }
 
-/** Decisión guardada: la esperada y "correcto" los fija el servidor a partir de la definición. */
+/**
+ * Decisión guardada. El servidor registra tres capas por separado:
+ *  - coincide_con_narrativa: el participante eligió lo que indicó la narrativa (comprensión);
+ *  - correcto: la elección coincide con la dirección libre del diseño de la escena;
+ *  - narrativa_coincide_con_diseno: la narrativa indicó la dirección del diseño (sistema).
+ */
 export interface DecisionRecord extends DecisionPayload {
   pregunta: string
   alternativas: { id: string; texto: string }[]
+  direccion_narrativa?: string | null
+  narrativa_coincide_con_diseno?: boolean | null
+  juicio_investigador?: boolean | null
   esperada: string | null
   correcto: boolean | null
   fuente_esperada: 'definicion' | 'fixture_tecnico' | 'no_definida'
@@ -220,6 +245,8 @@ export interface ResponsePayload {
   comprension?: Comprension
   /** Tarea de decisión (tipo C). La esperada NO se envía: la aplica el servidor. */
   decision?: DecisionPayload
+  percepcion_cambio?: PercepcionCambio
+  aclaraciones?: Aclaracion[]
   escalas?: Partial<Escalas>
   criterios?: Record<string, number>
   errores: ErrorRegistrado[]
@@ -236,12 +263,17 @@ export interface Metricas {
   objetos_inventados: string[]
   ubicaciones_evaluadas: number
   ubicaciones_correctas: number
+  pct_ubicaciones_correctas?: number | null
+  distancias_evaluadas?: number
+  distancias_correctas?: number
   relaciones_evaluadas: number
   relaciones_comprendidas: number
   pct_relaciones_comprendidas: number | null
   repeticiones_audio: number
+  aclaraciones?: number
   tiempo_respuesta_ms: number | null
-  decision_correcta?: boolean | null
+  decision_sigue_narrativa?: boolean | null
+  decision_coincide_diseno?: boolean | null
 }
 
 export interface StudyResponseRecord {
@@ -249,13 +281,15 @@ export interface StudyResponseRecord {
   indice: number
   registrado_en: string
   modo: ModoRegistro
-  prueba: { id: string; nombre: string; tipo: string; pista: TipoParticipante; estado_estimulos: string }
+  prueba: { id: string; nombre: string; tipo: string; pista: TipoParticipante; estado_estimulos: string; codificacion?: Codificacion[] }
   estimulo: null | { origen: string; stimulus_id?: string; sha256?: string; nombre_archivo?: string }
-  ejecucion: null | (Ejecucion & { audio: Ejecucion['audio'] & { archivo: string | null } })
+  ejecucion: null | (Ejecucion & { origen_audio?: 'congelado' | 'generado_en_sesion'; audio: Ejecucion['audio'] & { archivo: string | null } })
   reproducciones: PlayEvent[]
   respuesta_transcrita: string | null
   comprension: Comprension | null
   decision?: DecisionRecord | null
+  percepcion_cambio?: PercepcionCambio | null
+  aclaraciones?: Aclaracion[]
   escalas: Escalas | null
   criterios: Record<string, number> | null
   errores: ErrorRegistrado[]
@@ -267,10 +301,40 @@ export interface StudyResponseRecord {
   grabacion_participante: null | { archivo: string; sha256: string; tamano_bytes: number }
 }
 
-export interface SessionSummary {
+/** Conteos descriptivos de un grupo de respuestas formales (sesión o prueba). */
+export interface SummaryGroup {
+  objetos_referencia: number
+  objetos_identificados: number
+  pct_objetos_identificados: number | null
+  objetos_omitidos: number
+  objetos_inventados: number
+  ubicaciones_evaluadas: number
+  ubicaciones_correctas: number
+  pct_ubicaciones_correctas: number | null
+  distancias_evaluadas: number
+  distancias_correctas: number
+  relaciones_evaluadas: number
+  relaciones_comprendidas: number
+  pct_relaciones_comprendidas: number | null
+  repeticiones_audio: number
+  aclaraciones: number
+  tiempo_respuesta_mediana_ms: number | null
+  decisiones_registradas: number
+  decisiones_sin_respuesta: number
+  decisiones_siguen_narrativa: number
+  decisiones_no_siguen_narrativa: number
+  decisiones_coinciden_diseno: number
+  decisiones_no_coinciden_diseno: number
+  percepcion_cambio: Partial<Record<PercepcionCambio, number>>
+  criterios: Record<string, { n: number; mediana: number; min: number; max: number }>
+}
+
+export interface SessionSummary extends Partial<SummaryGroup> {
   respuestas_formales: number
   respuestas_ensayo: number
   pruebas_formales_registradas: string[]
+  por_prueba?: Record<string, SummaryGroup & { respuestas: number }>
+  duracion_sesion_min?: number | null
   objetos_referencia: number
   objetos_identificados: number
   pct_objetos_identificados: number | null
@@ -346,19 +410,44 @@ export const REPRODUCCION_OPTS: [Reproduccion, string][] = [
   ['parlantes', 'Parlantes del dispositivo'],
   ['otro', 'Otro'],
 ]
+export const RANGO_EDAD_OPTS: [RangoEdad, string][] = [
+  ['18_29', '18 a 29 años'],
+  ['30_44', '30 a 44 años'],
+  ['45_59', '45 a 59 años'],
+  ['60_mas', '60 años o más'],
+  ['no_informa', 'Prefiere no informar'],
+]
+export const AUDICION_OPTS: [Audicion, string][] = [
+  ['sin_dificultad', 'Sin dificultad para escuchar'],
+  ['con_dificultad', 'Con alguna dificultad para escuchar'],
+  ['no_informa', 'Prefiere no informar'],
+]
+export const PERCEPCION_CAMBIO_OPTS: [PercepcionCambio, string][] = [
+  ['menciona_cambio_real', 'Menciona el cambio real'],
+  ['no_menciona_cambio', 'No menciona ningún cambio'],
+  ['menciona_cambio_inexistente', 'Menciona un cambio que no ocurrió'],
+  ['no_responde', 'No responde'],
+]
+export const ACLARACION_OPTS: [TipoAclaracion, string][] = [
+  ['pregunta', 'Sobre la pregunta'],
+  ['escala', 'Sobre la escala'],
+  ['otra', 'Otra'],
+]
 
-/** Aviso visible junto a las escalas: las anclas aún no están validadas (doc. 27, §J). */
-export const ANCLAS_PROVISIONALES =
-  'Anclas provisionales (1 = nada… 5 = muy…), pendientes de validación por los directores: no son etiquetas definitivas.'
+/**
+ * Anclas verbales de las escalas 1–5: las mismas para todas las preguntas y leídas en voz
+ * alta completas (definidas el 2026-10-01, docs/EVALUACION_USUARIOS.md §0).
+ */
+export const ANCLAS: [number, string][] = [[1, 'nada'], [2, 'poco'], [3, 'moderadamente'], [4, 'bastante'], [5, 'muy']]
+export const ANCLAS_TEXTO = '1 nada · 2 poco · 3 moderadamente · 4 bastante · 5 muy'
 
-/** Escalas subjetivas 1–5 (doc. 27, §J). La dirección se indica para evitar ambigüedad. */
+/**
+ * Escalas del cuestionario posterior (cierre). Solo lo que no preguntan OBJ-05/06/07, para
+ * no repetir preguntas (naturalidad, suficiencia, redundancia y utilidad ya se preguntan allí).
+ */
 export const ESCALAS: { key: keyof Escalas; label: string; ayuda: string }[] = [
-  { key: 'claridad', label: 'Claridad', ayuda: '1 = nada clara · 5 = muy clara' },
-  { key: 'utilidad', label: 'Utilidad', ayuda: '1 = nada útil · 5 = muy útil' },
-  { key: 'suficiencia', label: 'Suficiencia de la información', ayuda: '1 = muy insuficiente · 5 = suficiente' },
-  { key: 'naturalidad_voz', label: 'Naturalidad de la voz (no el contenido)', ayuda: '1 = nada natural · 5 = muy natural' },
-  { key: 'carga_percibida', label: 'Carga percibida (métrica débil)', ayuda: '1 = ningún esfuerzo · 5 = mucho esfuerzo' },
-  { key: 'redundancia', label: 'Redundancia percibida', ayuda: '1 = nada repetitiva · 5 = muy repetitiva' },
+  { key: 'claridad', label: 'Claridad de las descripciones', ayuda: `${ANCLAS_TEXTO} (clara)` },
+  { key: 'carga_percibida', label: 'Esfuerzo para seguir las descripciones (métrica débil)', ayuda: `${ANCLAS_TEXTO} (esfuerzo; más alto = más esfuerzo)` },
 ]
 
 export const EMPTY_ESCALAS: Escalas = {
@@ -390,6 +479,8 @@ export type FieldErrors = Record<string, string>
 export function validateParticipant(codigo: string, tipo: TipoParticipante, ficha: Ficha): FieldErrors {
   const e: FieldErrors = {}
   if (!CODE_RE.test(codigo)) e.codigo = 'Use un código anonimizado: P01, P02… (PTEST01… para pruebas técnicas). Nunca el nombre.'
+  if (!ficha.rango_edad) e.rango_edad = 'Indique el rango de edad (o "Prefiere no informar").'
+  if (!ficha.audicion_autodeclarada) e.audicion_autodeclarada = 'Indique cómo escucha (o "Prefiere no informar").'
   const cv = ficha.condicion_visual
   if (tipo === 'objetivo' && cv.tipo_ceguera === 'no_aplica')
     e.tipo_ceguera = 'Un participante objetivo debe tener ceguera congénita o adquirida.'
@@ -437,6 +528,8 @@ export function normalizeFicha(f: Ficha): Ficha {
       frecuencia_uso: t.utiliza.includes('ninguna') ? null : t.frecuencia_uso,
     },
     experiencia_descripcion_audio: f.experiencia_descripcion_audio,
+    rango_edad: f.rango_edad ?? null,
+    audicion_autodeclarada: f.audicion_autodeclarada ?? null,
   }
 }
 
@@ -494,19 +587,18 @@ export interface ExecutionRule {
 }
 
 /**
- * Qué modos admite una prueba en una sesión:
- *  - formal: la prueba es de la pista de la sesión y su estímulo está definido
- *    (o no lo necesita). Una prueba POR_DEFINIR nunca es formal.
- *  - ensayo: solo en sesiones piloto o de prueba técnica (validar el procedimiento).
+ * Qué modos admite una prueba en una sesión (mismas reglas que el backend):
+ *  - formal: la prueba es de la pista de la sesión y su estímulo está definido (o no lo
+ *    necesita). El piloto también registra como formales las actividades objetivo: se
+ *    consolidan aparte y validan el instrumento. Una prueba POR_DEFINIR nunca es formal.
+ *  - ensayo: en sesiones piloto o de prueba técnica. En el objetivo, solo la práctica.
  */
 export function executionRule(test: CatalogTestLike, tipo: TipoParticipante, esPrueba: boolean): ExecutionRule {
   const ensayo = tipo === 'piloto' || esPrueba
   if (tipo === 'piloto' && test.pista === 'objetivo')
-    return {
-      formal: false,
-      ensayo: true,
-      motivo: 'Actividad del procedimiento: en el piloto se ejecuta como ensayo, con imágenes del Dataset 1.',
-    }
+    return test.ejecutable_formal
+      ? { formal: true, ensayo: true, motivo: null }
+      : { formal: false, ensayo: true, motivo: 'Estímulos POR DEFINIR en el catálogo: en el piloto solo como ensayo.' }
   if (test.pista !== tipo)
     return {
       formal: false,
@@ -552,7 +644,13 @@ const blank = (s: string | null | undefined) => !s || !s.trim()
 export function cleanComprension(c: Comprension): Comprension | undefined {
   const objetos = c.objetos
     .filter((o) => !blank(o.objeto))
-    .map((o) => ({ ...o, objeto: o.objeto.trim(), ubicacion_reportada: blank(o.ubicacion_reportada) ? null : o.ubicacion_reportada!.trim() }))
+    .map((o) => ({
+      ...o,
+      objeto: o.objeto.trim(),
+      ubicacion_reportada: blank(o.ubicacion_reportada) ? null : o.ubicacion_reportada!.trim(),
+      distancia_reportada: blank(o.distancia_reportada) ? null : o.distancia_reportada!.trim(),
+      distancia_correcta: o.distancia_correcta ?? 'no_reportada',
+    }))
   const objetos_inventados = c.objetos_inventados.map((s) => s.trim()).filter(Boolean)
   const relaciones = c.relaciones
     .filter((r) => !blank(r.relacion))
@@ -579,6 +677,10 @@ export interface ResponseDraft {
   transcripcion: string
   comprension: Comprension
   decision?: DecisionPayload
+  percepcionCambio?: PercepcionCambio | null
+  aclaraciones?: Aclaracion[]
+  /** Qué codifica la prueba (catálogo): sin codificación no se envía la comprensión. */
+  codificacion?: Codificacion[]
   escalas: Escalas
   criterios: Record<string, number>
   errores: ErrorRegistrado[]
@@ -599,9 +701,12 @@ export function buildResponsePayload(d: ResponseDraft): ResponsePayload {
   if (d.audioBase64) payload.audio_narrativa_base64 = d.audioBase64
   if (d.tiempoRespuestaMs !== null) payload.tiempo_respuesta_ms = Math.round(d.tiempoRespuestaMs)
   if (opt(d.transcripcion)) payload.respuesta_transcrita = opt(d.transcripcion)
-  const comp = cleanComprension(d.comprension)
+  const codifica = d.codificacion === undefined || d.codificacion.some((c) => c !== 'cambio')
+  const comp = codifica ? cleanComprension(d.comprension) : undefined
   if (comp) payload.comprension = comp
   if (d.decision) payload.decision = d.decision
+  if (d.percepcionCambio) payload.percepcion_cambio = d.percepcionCambio
+  if (d.aclaraciones?.length) payload.aclaraciones = d.aclaraciones
   const esc = cleanEscalas(d.escalas)
   if (esc) payload.escalas = esc
   if (Object.keys(d.criterios).length) payload.criterios = d.criterios
@@ -621,7 +726,7 @@ export function saveBlockers(opts: {
 }): string[] {
   const out: string[] = []
   if (opts.requiereEstimulo) {
-    if (!opts.hasExecution) out.push('Ejecute la detección del estímulo.')
+    if (!opts.hasExecution) out.push('Cargue el audio del estímulo.')
     else if (opts.modo === 'formal' && !opts.audioAvailable) out.push('Sin audio del sistema no hay prueba formal.')
     if (opts.hasExecution && opts.audioAvailable && opts.plays === 0) out.push('Reproduzca el audio al participante.')
   }

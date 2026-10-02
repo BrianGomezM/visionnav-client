@@ -24,6 +24,8 @@ export interface CatalogUserTest {
   guion_investigador: string
   tipo: TestKind
   criterios: string[] | null
+  /** Qué se codifica de la respuesta (frente a la narrativa): objetos, relaciones, ubicación, distancia, cambio. */
+  codificacion: ('objetos' | 'relaciones' | 'ubicacion' | 'distancia' | 'cambio')[]
   metricas: string[]
   metricas_texto: string[]
   tipo_evaluacion: string
@@ -67,6 +69,20 @@ export interface CatalogStimulus {
   sha256: string
   valido: boolean
   imagen_url: string | null
+  /** Escena de práctica (familiarización): solo ensayo. */
+  practica?: boolean
+  /** Audio congelado: lo único que se reproduce en las pruebas formales. */
+  audio_congelado?: FrozenAudio | null
+}
+
+export interface FrozenAudio {
+  sha256: string
+  content_type: string
+  tamano_bytes: number
+  duracion_s: number | null
+  narrativa_final: string
+  tts_modelo: string
+  audio_url: string
 }
 
 export interface Catalog {

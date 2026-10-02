@@ -4,9 +4,70 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { fetchConsentAudio, fetchStoredAudio, friendlyError } from '@/hooks/use-study'
 import type { SessionDetail } from '@/hooks/use-study'
-import type { StudyResponseRecord } from '@/lib/study-protocol'
+import { PERCEPCION_CAMBIO_OPTS, type StudyResponseRecord, type SummaryGroup } from '@/lib/study-protocol'
 
-const pct = (v: number | null) => (v === null ? '—' : `${v} %`)
+const pct = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${v} %`)
+const frac = (a: number | undefined, b: number | undefined, p?: number | null) =>
+  b ? `${a ?? 0}/${b}${p !== undefined ? ` (${pct(p)})` : ''}` : '—'
+const yn = (v: boolean | null | undefined) => (v === null || v === undefined ? '—' : v ? 'sí' : 'no')
+
+/** Una fila por prueba: solo las columnas que esa prueba codifica tienen valor. */
+function PerTestTable({ porPrueba }: { porPrueba: Record<string, SummaryGroup & { respuestas: number }> }) {
+  const rows = Object.entries(porPrueba)
+  if (!rows.length) return null
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <caption className="text-left text-sm font-medium py-2">Resumen por prueba (solo respuestas formales)</caption>
+        <thead>
+          <tr className="text-left text-xs text-muted-foreground border-b border-border">
+            <th scope="col" className="py-2 pr-3">Prueba</th>
+            <th scope="col" className="py-2 pr-3">Objetos identificados</th>
+            <th scope="col" className="py-2 pr-3">Inventados</th>
+            <th scope="col" className="py-2 pr-3">Relaciones</th>
+            <th scope="col" className="py-2 pr-3">Ubicación</th>
+            <th scope="col" className="py-2 pr-3">Distancia</th>
+            <th scope="col" className="py-2 pr-3">Decisión: sigue narrativa / coincide diseño</th>
+            <th scope="col" className="py-2 pr-3">Cambio</th>
+            <th scope="col" className="py-2 pr-3">Criterios (mediana)</th>
+            <th scope="col" className="py-2">Rep. / aclar.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([id, g]) => (
+            <tr key={id} className="border-b border-border align-top">
+              <th scope="row" className="py-2 pr-3 font-medium">{id}</th>
+              <td className="py-2 pr-3">{frac(g.objetos_identificados, g.objetos_referencia, g.pct_objetos_identificados)}</td>
+              <td className="py-2 pr-3">{g.objetos_referencia ? g.objetos_inventados : '—'}</td>
+              <td className="py-2 pr-3">{frac(g.relaciones_comprendidas, g.relaciones_evaluadas, g.pct_relaciones_comprendidas)}</td>
+              <td className="py-2 pr-3">{frac(g.ubicaciones_correctas, g.ubicaciones_evaluadas, g.pct_ubicaciones_correctas)}</td>
+              <td className="py-2 pr-3">{frac(g.distancias_correctas, g.distancias_evaluadas)}</td>
+              <td className="py-2 pr-3">
+                {g.decisiones_registradas
+                  ? `${g.decisiones_siguen_narrativa}/${g.decisiones_registradas - g.decisiones_sin_respuesta} · ${g.decisiones_coinciden_diseno}/${g.decisiones_registradas - g.decisiones_sin_respuesta}` +
+                    (g.decisiones_sin_respuesta ? ` (sin respuesta: ${g.decisiones_sin_respuesta})` : '')
+                  : '—'}
+              </td>
+              <td className="py-2 pr-3 text-xs">
+                {Object.entries(g.percepcion_cambio ?? {})
+                  .map(([k, v]) => `${PERCEPCION_CAMBIO_OPTS.find(([o]) => o === k)?.[1] ?? k}: ${v}`)
+                  .join(' · ') || '—'}
+              </td>
+              <td className="py-2 pr-3 text-xs">
+                {Object.entries(g.criterios ?? {})
+                  .map(([k, c]) => `${k}: ${c.mediana}`)
+                  .join(' · ') || '—'}
+              </td>
+              <td className="py-2">
+                {g.repeticiones_audio} / {g.aclaraciones}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
 function StoredAudio({ baseUrl, sessionId, r, tipo }: { baseUrl: string; sessionId: string; r: StudyResponseRecord; tipo: 'narrativa' | 'participante' }) {
   const [url, setUrl] = useState<string | null>(null)
@@ -94,15 +155,10 @@ export function SessionResults({ baseUrl, detail }: { baseUrl: string; detail: S
         {(
           [
             ['Respuestas formales', resumen.respuestas_formales],
-            ['Ensayos', resumen.respuestas_ensayo],
-            ['Objetos identificados', `${resumen.objetos_identificados}/${resumen.objetos_referencia} (${pct(resumen.pct_objetos_identificados)})`],
-            ['Relaciones comprendidas', `${resumen.relaciones_comprendidas}/${resumen.relaciones_evaluadas} (${pct(resumen.pct_relaciones_comprendidas)})`],
-            ['Objetos omitidos', resumen.objetos_omitidos],
-            ['Objetos inventados', resumen.objetos_inventados],
-            ['Repeticiones de audio', resumen.repeticiones_audio],
-            ['Mediana tiempo de respuesta (débil)', resumen.tiempo_respuesta_mediana_ms === null ? '—' : `${(resumen.tiempo_respuesta_mediana_ms / 1000).toFixed(1)} s`],
-            // Conteos por tipo de resultado; no se combinan en una tasa de éxito global.
-            ['Decisiones (correctas / incorrectas / sin respuesta)', `${resumen.decisiones_correctas ?? 0} / ${resumen.decisiones_incorrectas ?? 0} / ${resumen.decisiones_sin_respuesta ?? 0} de ${resumen.decisiones_registradas ?? 0}`],
+            ['Ensayos y práctica', resumen.respuestas_ensayo],
+            ['Duración de la sesión', resumen.duracion_sesion_min == null ? '—' : `${resumen.duracion_sesion_min} min`],
+            ['Repeticiones de audio / aclaraciones', `${resumen.repeticiones_audio ?? 0} / ${resumen.aclaraciones ?? 0}`],
+            ['Mediana tiempo de respuesta (débil)', resumen.tiempo_respuesta_mediana_ms == null ? '—' : `${(resumen.tiempo_respuesta_mediana_ms / 1000).toFixed(1)} s`],
           ] as const
         ).map(([k, v]) => (
           <div key={k} className="rounded-lg border border-border p-3">
@@ -111,6 +167,7 @@ export function SessionResults({ baseUrl, detail }: { baseUrl: string; detail: S
           </div>
         ))}
       </dl>
+      {resumen.por_prueba && <PerTestTable porPrueba={resumen.por_prueba} />}
       <p className="text-xs text-muted-foreground">{resumen.nota}</p>
 
       <div className="overflow-x-auto">
@@ -135,7 +192,10 @@ export function SessionResults({ baseUrl, detail }: { baseUrl: string; detail: S
                 <th scope="row" className="py-2 pr-3 font-mono text-xs">{r.response_id}</th>
                 <td className="py-2 pr-3">{r.prueba.id}</td>
                 <td className="py-2 pr-3">{r.modo}</td>
-                <td className="py-2 pr-3 text-xs">{r.estimulo?.stimulus_id ?? r.estimulo?.nombre_archivo ?? '—'}</td>
+                <td className="py-2 pr-3 text-xs">
+                  {r.estimulo?.stimulus_id ?? r.estimulo?.nombre_archivo ?? '—'}
+                  {r.ejecucion?.origen_audio && <span className="block text-muted-foreground">{r.ejecucion.origen_audio === 'congelado' ? 'audio congelado' : 'audio generado'}</span>}
+                </td>
                 <td className="py-2 pr-3 text-xs">
                   {r.metricas.objetos_identificados}/{r.metricas.objetos_referencia} · {r.metricas.relaciones_comprendidas}/
                   {r.metricas.relaciones_evaluadas}
@@ -143,10 +203,13 @@ export function SessionResults({ baseUrl, detail }: { baseUrl: string; detail: S
                 <td className="py-2 pr-3">{r.metricas.repeticiones_audio}</td>
                 <td className="py-2 pr-3 text-xs">
                   {r.decision
-                    ? `${r.decision.seleccionada} (esperada: ${r.decision.esperada ?? 'no definida'}) · ${
-                        r.decision.correcto === null ? 'no evaluable' : r.decision.correcto ? 'correcta' : 'incorrecta'
-                      }${r.decision.fixture_tecnico ? ` · ${r.decision.fixture_tecnico}` : ''}`
+                    ? `${r.decision.seleccionada} · narrativa: ${r.decision.direccion_narrativa ?? '—'} (¿la sigue? ${yn(
+                        r.decision.coincide_con_narrativa
+                      )}) · diseño: ${r.decision.esperada ?? 'no definido'} (¿coincide? ${yn(r.decision.correcto)})${
+                        r.decision.fixture_tecnico ? ` · ${r.decision.fixture_tecnico}` : ''
+                      }`
                     : '—'}
+                  {r.percepcion_cambio && ` · cambio: ${PERCEPCION_CAMBIO_OPTS.find(([k]) => k === r.percepcion_cambio)?.[1]}`}
                 </td>
                 <td className="py-2 pr-3 text-xs">
                   {[...r.errores_derivados.map((e) => `${e.tipo}: ${e.elemento}`), ...r.errores.map((e) => `${e.tipo}: ${e.descripcion}`)].join(' · ') || '—'}

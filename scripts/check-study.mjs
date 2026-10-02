@@ -29,6 +29,8 @@ const ficha = () => ({
   condicion_visual: { tipo_ceguera: 'adquirida', etapa_adquisicion: 'adultez', experiencia_visual_previa: 'si' },
   tecnologias: { utiliza: ['lector_pantalla', 'smartphone'], otra_descripcion: null, lectores_pantalla: ['nvda'], lector_otro: null, frecuencia_uso: 'diaria' },
   experiencia_descripcion_audio: 'no',
+  rango_edad: '30_44',
+  audicion_autodeclarada: 'sin_dificultad',
 })
 
 // ── Código anonimizado ──
@@ -43,6 +45,12 @@ await check('código: formato P01/PTEST01, nunca un nombre', () => {
 // ── Ficha ──
 await check('ficha válida (objetivo, ceguera adquirida, lector NVDA)', () => {
   assert.deepEqual(m.validateParticipant('PTEST01', 'objetivo', ficha()), {})
+})
+await check('ficha: rango de edad y audición autodeclarada obligatorios', () => {
+  const f = { ...ficha(), rango_edad: null, audicion_autodeclarada: null }
+  const e = m.validateParticipant('PTEST01', 'objetivo', f)
+  assert.ok(e.rango_edad && e.audicion_autodeclarada)
+  assert.equal(m.normalizeFicha(ficha()).rango_edad, '30_44')
 })
 await check('ficha: condición visual coherente con el tipo', () => {
   const f = ficha()
@@ -109,11 +117,13 @@ await check('prueba POR_DEFINIR: no formal; ensayo solo en piloto/prueba técnic
   const piloto = m.executionRule(obj01, 'piloto', false)
   assert.deepEqual([piloto.formal, piloto.ensayo], [false, true])
 })
-await check('prueba definida: formal solo en su pista', () => {
+await check('prueba definida: formal en su pista; el piloto también registra las actividades objetivo', () => {
   assert.equal(m.executionRule(pil01, 'piloto', false).formal, true)
   assert.equal(m.executionRule(pil01, 'objetivo', false).formal, false)
   const defined = { ...obj01, estado_estimulos: 'definido', ejecutable_formal: true }
   assert.equal(m.executionRule(defined, 'objetivo', false).formal, true)
+  assert.equal(m.executionRule(defined, 'objetivo', false).ensayo, false)          // objetivo: solo la práctica es ensayo
+  assert.deepEqual([m.executionRule(defined, 'piloto', false).formal, m.executionRule(defined, 'piloto', false).ensayo], [true, true])
 })
 
 // ── Audio, repeticiones y respuesta ──
@@ -258,9 +268,19 @@ await check('narrativa: objetos con su ubicación y relaciones (sugerencias para
     'aproximadamente 4 pasos. Planta en maceta a tu derecha a aproximadamente 5 pasos. Puedes avanzar hacia el frente con cuidado.'
   const p = narrative.parseNarrative(d3)
   assert.deepEqual(p.objetos, [
-    { objeto: 'persona', ubicacion: 'derecha' }, { objeto: 'sofá', ubicacion: 'izquierda' },
-    { objeto: 'planta en maceta', ubicacion: 'derecha' }])
+    { objeto: 'persona', ubicacion: 'derecha', pasos: 4 }, { objeto: 'sofá', ubicacion: 'izquierda', pasos: 4 },
+    { objeto: 'planta en maceta', ubicacion: 'derecha', pasos: 5 }])
   assert.deepEqual(p.relaciones, [])
+  // Narrativa congelada real de DS1-C1: la relación va implícita en «un poco más adelante».
+  const c1real = narrative.parseNarrative('Parece que estás en un comedor. Silla frente a ti a aproximadamente 5 pasos. ' +
+    'Mesa de comedor un poco más adelante frente a ti a aproximadamente 5 pasos. Puedes avanzar hacia el frente. ' +
+    'Tienes aproximadamente 5 pasos libres antes del primer obstáculo.')
+  assert.deepEqual(c1real.objetos.map((o) => o.objeto), ['silla', 'mesa de comedor'])
+  assert.equal(c1real.relaciones.length, 1)
+  const coded = narrative.codedObjectName({ objeto: 'silla', ubicacion: 'derecha', pasos: 5 })
+  assert.equal(coded, 'silla (derecha, ~5 pasos)')
+  assert.equal(narrative.narratedLocation(coded), 'derecha')
+  assert.equal(narrative.narratedSteps(coded), 5)
   const c1 = narrative.parseNarrative('Hay una silla al frente, delante de la mesa. La mesa está al frente a unos 4 pasos.')
   assert.deepEqual(c1.objetos.map((o) => o.objeto), ['silla', 'mesa'])
   assert.equal(c1.relaciones.length, 1)
@@ -268,9 +288,29 @@ await check('narrativa: objetos con su ubicación y relaciones (sugerencias para
   assert.equal(narrative.narratedLocation('persona'), null)
 })
 const obj01Ref = { id: 'OBJ-01', pista: 'objetivo', tipo: 'imagen', estado_estimulos: 'por_definir', ejecutable_formal: false, requiere_estimulo: true }
-await check('piloto: las actividades con audio se ejecutan como ensayo', () => {
+await check('piloto: una actividad POR_DEFINIR solo como ensayo', () => {
   const r = m.executionRule(obj01Ref, 'piloto', false)
   assert.deepEqual([r.formal, r.ensayo], [false, true])
+})
+await check('anclas definitivas de las escalas y cierre sin preguntas repetidas', () => {
+  assert.deepEqual(m.ANCLAS.map(([n]) => n), [1, 2, 3, 4, 5])
+  assert.equal(m.ANCLAS_PROVISIONALES, undefined)
+  assert.deepEqual(m.ESCALAS.map((e) => e.key), ['claridad', 'carga_percibida'])
+})
+await check('payload: solo la codificación de la prueba, cambio y aclaraciones', () => {
+  const base = {
+    pruebaId: 'OBJ-04', modo: 'formal', plays: [], tiempoRespuestaMs: null, transcripcion: '',
+    comprension: { objetos: [{ objeto: 'sofá', identificado: true, ubicacion_reportada: null, ubicacion_correcta: 'no_reportada' }], objetos_inventados: [], relaciones: [] },
+    escalas: m.EMPTY_ESCALAS, criterios: {}, errores: [], aspectosConfusos: '', comentarios: '', observaciones: '',
+  }
+  const p = m.buildResponsePayload({ ...base, codificacion: ['cambio'], percepcionCambio: 'menciona_cambio_real',
+    aclaraciones: [{ instante: '2026-10-01T10:00:00Z', tipo: 'pregunta' }] })
+  assert.equal(p.comprension, undefined)                       // OBJ-04 no codifica objetos
+  assert.equal(p.percepcion_cambio, 'menciona_cambio_real')
+  assert.equal(p.aclaraciones.length, 1)
+  const q = m.buildResponsePayload({ ...base, pruebaId: 'OBJ-01', codificacion: ['objetos', 'relaciones'] })
+  assert.equal(q.comprension.objetos[0].distancia_correcta, 'no_reportada')
+  assert.equal(q.percepcion_cambio, undefined)
 })
 
 // ── Comprobaciones estáticas del código del cliente ──

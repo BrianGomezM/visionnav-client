@@ -25,6 +25,11 @@ import { ConsentDownloadLinks } from '@/components/study/consent-document'
 import { TestInfo } from '@/components/study/test-info'
 import { primaryButtonClass } from '@/components/study/form-controls'
 import { TRACK_LABEL, executionRule, type SessionListItem } from '@/lib/study-protocol'
+import { FieldInfo } from '@/components/study/field-info'
+import { FIELD_HELP } from '@/lib/study-help'
+
+/** Identificador interno de la práctica (no es una prueba del catálogo). */
+const PRACTICA = '__practica__'
 import { cn } from '@/lib/utils'
 
 interface StudyTabProps {
@@ -39,13 +44,13 @@ type View = 'list' | 'wizard' | 'session' | 'close' | 'results'
  * el participante escucha el audio de la API y responde verbalmente.
  *
  * Flujo: participante (ficha y contexto) → consentimiento (lectura grabada + 4
- * afirmaciones) → confirmar → selección de prueba (catálogo del backend) → estímulo →
- * detección → narrativa → audio y repeticiones → respuestas → errores → escalas →
- * observaciones → guardar → siguiente prueba → finalizar → resultados.
+ * afirmaciones) → confirmar → práctica (escena de familiarización, ensayo) → pruebas
+ * del catálogo en orden → audio CONGELADO de la escena → respuesta y codificación →
+ * notas → guardar → siguiente prueba → finalizar (cuestionario breve) → resultados.
  *
- * Piloto: ejecuta las mismas actividades con audio (como ensayo, con imágenes del
- * Dataset 1) y después las preguntas sobre el procedimiento (PIL-*), como describe su
- * consentimiento.
+ * Piloto: recorre las mismas actividades, con las mismas escenas y audios, registradas
+ * como formales en el grupo piloto (consolidado aparte; no es evidencia de
+ * accesibilidad), y después las preguntas sobre el procedimiento (PIL-*).
  */
 export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
   const sessions = useStudySessions(baseUrl, isActive)
@@ -59,6 +64,7 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
   const [toDelete, setToDelete] = useState<SessionListItem | null>(null)
   const [announce, setAnnounce] = useState('')
   const titleRef = useRef<HTMLHeadingElement>(null)
+  const runnerRef = useRef<HTMLDivElement>(null)
 
   const detail = useStudySessionDetail(baseUrl, activeId)
   const sesion = detail.data?.sesion ?? null
@@ -66,6 +72,14 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
   useEffect(() => {
     titleRef.current?.focus()
   }, [view, activeId])
+
+  // Al elegir una prueba (o pasar a la siguiente), la pantalla baja hasta ella: en pantallas
+  // medianas la lista va arriba y el reproductor quedaría fuera de la vista.
+  useEffect(() => {
+    if (!selectedTestId || !runnerRef.current) return
+    const top = runnerRef.current.getBoundingClientRect().top
+    if (top < 0 || top > window.innerHeight * 0.4) runnerRef.current.scrollIntoView({ block: 'start' })
+  }, [selectedTestId, runnerKey])
 
   const trackTests: CatalogUserTest[] = useMemo(
     () => (catalogApi.catalog?.pruebas_usuario ?? []).filter((t) => !sesion || t.pista === sesion.tipo_participante),
@@ -86,8 +100,22 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
     () => new Set((detail.data?.respuestas ?? []).map((r) => r.estimulo?.stimulus_id).filter(Boolean) as string[]),
     [detail.data]
   )
-  const formalTests = trackTests.filter((t) => t.ejecutable_formal)
-  const selectedTest = [...trackTests, ...otherTrackTests].find((t) => t.id === selectedTestId) ?? null
+  // Pruebas que esta sesión puede registrar como formales (el piloto incluye las actividades objetivo).
+  const formalTests = sesion
+    ? [...trackTests, ...otherTrackTests].filter((t) => executionRule(t, sesion.tipo_participante, sesion.es_prueba_tecnica).formal)
+    : []
+  const isPractice = selectedTestId === PRACTICA
+  // La práctica usa la pregunta de identificación de objetos (la primera prueba objetivo que
+  // codifica objetos, sin fijar su id) con la escena de práctica, en modo ensayo.
+  const practiceTest =
+    (catalogApi.catalog?.pruebas_usuario ?? []).find((t) => t.pista === 'objetivo' && t.codificacion?.includes('objetos')) ?? null
+  const hasPractice = (catalogApi.catalog?.estimulos ?? []).some((s) => s.practica)
+  const practiceDone = (detail.data?.respuestas ?? []).some((r) =>
+    (catalogApi.catalog?.estimulos ?? []).some((s) => s.practica && s.stimulus_id === r.estimulo?.stimulus_id)
+  )
+  const selectedTest = isPractice
+    ? practiceTest
+    : [...trackTests, ...otherTrackTests].find((t) => t.id === selectedTestId) ?? null
   // Orden de ejecución: en piloto, primero las actividades con audio y luego la encuesta.
   const isPilot = sesion?.tipo_participante === 'piloto'
   const orderedTests = isPilot ? [...otherTrackTests, ...trackTests] : [...trackTests, ...otherTrackTests]
@@ -106,7 +134,7 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
       const r = executionRule(t, sesion.tipo_participante, sesion.es_prueba_tecnica)
       return (r.formal && !formalDone.has(t.id)) || (!r.formal && r.ensayo)
     }
-    const idx = orderedTests.findIndex((t) => t.id === selectedTestId)
+    const idx = isPractice ? -1 : orderedTests.findIndex((t) => t.id === selectedTestId)
     const pending =
       orderedTests.slice(idx + 1).find(runnable) ??
       formalTests.find((t) => !formalDone.has(t.id) && t.id !== selectedTestId)
@@ -417,9 +445,32 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
               </p>
             </div>
           )}
+          {hasPractice && practiceTest && (
+            <div className="flex items-start gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTestId(PRACTICA)
+                  setRunnerKey((k) => k + 1)
+                }}
+                aria-current={isPractice ? 'true' : undefined}
+                className={cn(
+                  'flex-1 min-w-0 text-left p-3 rounded-lg border border-dashed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4B45A8]',
+                  isPractice ? 'border-[#4B45A8] bg-[#EEEDFE]' : 'border-border bg-card hover:border-[#4B45A8]/60'
+                )}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-foreground">0 · Práctica (familiarización)</span>
+                  {practiceDone && <CheckCircle2 className="w-4 h-4 text-[#0F6E56] shrink-0" aria-hidden="true" />}
+                </span>
+                <span className="text-xs mt-0.5 block text-muted-foreground">Ensayo, antes de OBJ-01 · no es evidencia</span>
+              </button>
+              <FieldInfo help={FIELD_HELP.practica} />
+            </div>
+          )}
           {isPilot ? (
             <>
-              <h4 className="text-sm font-medium text-foreground">1. Actividades con audio (ensayo con imágenes del Dataset 1)</h4>
+              <h4 className="text-sm font-medium text-foreground">1. Actividades (mismas escenas y audios; grupo piloto)</h4>
               <ul className="space-y-2">{otherTrackTests.map(renderTest)}</ul>
               <h4 className="text-sm font-medium text-foreground pt-2">2. Encuesta sobre el procedimiento</h4>
               <ul className="space-y-2">{trackTests.map(renderTest)}</ul>
@@ -437,14 +488,15 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
           )}
         </nav>
 
-        <div className="lg:col-span-2">
+        <div ref={runnerRef} className="lg:col-span-2 scroll-mt-20">
           {!selectedTest ? (
             <div className="h-full flex items-center justify-center rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
               Seleccione una prueba del catálogo para comenzar.
             </div>
           ) : (
             <TestRunner
-              key={`${selectedTest.id}-${runnerKey}`}
+              key={`${isPractice ? PRACTICA : selectedTest.id}-${runnerKey}`}
+              practice={isPractice}
               baseUrl={baseUrl}
               sesion={sesion}
               test={selectedTest}

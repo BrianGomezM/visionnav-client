@@ -13,62 +13,76 @@ export interface HelpText {
   registro?: string
 }
 
+// Anclas verbales únicas (1 nada · 2 poco · 3 moderadamente · 4 bastante · 5 muy), leídas
+// completas en cada pregunta (definidas el 2026-10-01, docs/EVALUACION_USUARIOS.md §0).
+const OPCIONES = 'Responda con un número: 1 nada, 2 poco, 3 moderadamente, 4 bastante o 5 muy.'
+
 /** Escalas 1–5 (valoraciones subjetivas y criterios de las pruebas de escala). */
 export const SCALE_HELP: Record<string, HelpText> = {
   claridad: {
-    titulo: 'Claridad',
-    texto: 'Si la descripción se entendió sin esfuerzo: palabras comprensibles, frases ordenadas, sin ambigüedad.',
-    pregunta: '¿Qué tan clara le pareció la descripción? 1 es nada clara y 5 muy clara.',
+    titulo: 'Claridad de las descripciones',
+    texto: 'Si las descripciones se entendieron sin esfuerzo: palabras comprensibles, frases ordenadas, sin ambigüedad.',
+    pregunta: `Pensando en todas las descripciones, ¿qué tan claras le parecieron? ${OPCIONES}`,
+  },
+  inteligibilidad: {
+    titulo: 'Inteligibilidad de la voz',
+    texto: 'Si se entendían las palabras que pronunciaba la voz (ITU-T P.85), no el contenido.',
+    pregunta: `¿Qué tan fácil fue entender las palabras que decía la voz? ${OPCIONES}`,
   },
   utilidad: {
     titulo: 'Utilidad',
     texto: 'Si la información le serviría para hacerse una idea del lugar y orientarse.',
-    pregunta: '¿Qué tan útil le resultó esta descripción para saber qué hay a su alrededor? 1 es nada útil y 5 muy útil.',
+    pregunta: `¿Qué tan útil le resultó esta descripción para saber qué hay a su alrededor? ${OPCIONES}`,
   },
   suficiencia: {
     titulo: 'Suficiencia de la información',
     texto: 'Si la descripción dio la información necesaria, sin que faltara algo importante.',
-    pregunta: '¿La descripción le dio la información que necesitaba? 1 es muy insuficiente y 5 suficiente.',
+    pregunta: `Pensando en todas las descripciones, ¿qué tan suficiente fue la información para hacerse una idea del lugar? ${OPCIONES}`,
   },
   naturalidad_voz: {
     titulo: 'Naturalidad de la voz',
     texto: 'Cómo suena la voz sintética (entonación, ritmo, pronunciación), no el contenido de lo que dice.',
-    pregunta: 'Sin pensar en lo que dijo, ¿qué tan natural le sonó la voz? 1 es nada natural y 5 muy natural.',
+    pregunta: `Sin pensar en lo que dijo, ¿qué tan natural le sonó la voz? ${OPCIONES}`,
   },
   carga_percibida: {
     titulo: 'Carga percibida',
-    texto: 'Esfuerzo mental que le exigió escuchar y recordar la descripción. Métrica débil: es una percepción.',
-    pregunta: '¿Cuánto esfuerzo le costó seguir la descripción? 1 es ningún esfuerzo y 5 mucho esfuerzo.',
+    texto: 'Esfuerzo mental que le exigió escuchar y recordar las descripciones (adaptado del ítem de demanda mental del NASA-TLX; un solo ítem, no validado). Más alto = más esfuerzo.',
+    pregunta: `¿Qué tanto esfuerzo le costó seguir las descripciones? ${OPCIONES}`,
   },
   redundancia: {
     titulo: 'Redundancia',
-    texto: 'Si la descripción repitió información o fue más larga de lo necesario.',
-    pregunta: '¿Sintió que la descripción repetía cosas? 1 es nada repetitiva y 5 muy repetitiva.',
+    texto: 'Si las descripciones repitieron información o fueron más largas de lo necesario. Más alto = más repetitivas.',
+    pregunta: `Pensando en todas las descripciones, ¿qué tan repetitivas le parecieron? ${OPCIONES}`,
   },
   velocidad: {
     titulo: 'Velocidad',
     texto: 'Si el ritmo del habla fue adecuado para entender.',
-    pregunta: '¿La voz habló a una velocidad adecuada? 1 es nada adecuada (muy lenta o muy rápida) y 5 muy adecuada.',
+    pregunta: `¿Qué tan adecuada le pareció la velocidad de la voz? ${OPCIONES} Si no fue adecuada, ¿fue lenta o rápida?`,
   },
   naturalidad: {
     titulo: 'Naturalidad',
     texto: 'Cómo suena la voz sintética, no el contenido.',
-    pregunta: '¿Qué tan natural le sonó la voz? 1 es nada natural y 5 muy natural.',
+    pregunta: `¿Qué tan natural le sonó la voz? ${OPCIONES}`,
   },
   volumen: {
     titulo: 'Volumen',
     texto: 'Si el volumen fue cómodo con el dispositivo de la sesión.',
-    pregunta: '¿El volumen fue cómodo? 1 es nada cómodo y 5 muy cómodo.',
+    pregunta: `¿Qué tan cómodo le pareció el volumen? ${OPCIONES}`,
   },
   utilidad_general: {
     titulo: 'Utilidad general',
-    texto: 'Valoración global del sistema para orientarse en un lugar desconocido.',
-    pregunta: 'En general, ¿qué tan útil le parece este sistema para orientarse en un espacio que no conoce? 1 es nada útil y 5 muy útil.',
+    texto: 'Valoración global de las descripciones para orientarse en un lugar desconocido.',
+    pregunta: `En general, ¿qué tan útiles le parecen estas descripciones para orientarse en un espacio que no conoce? ${OPCIONES}`,
   },
   claridad_instrucciones: {
     titulo: 'Claridad de las instrucciones',
     texto: 'Si las instrucciones de la sesión se entendieron sin ambigüedad (solo piloto).',
-    pregunta: '¿Qué tan claro le quedó lo que se le iba a pedir en esta sesión? 1 es nada claro y 5 muy claro.',
+    pregunta: `Desde el inicio, ¿qué tan claro le quedó lo que se le iba a pedir en cada actividad? ${OPCIONES}`,
+  },
+  comprension_escalas: {
+    titulo: 'Comprensión de las escalas',
+    texto: 'Si el participante pudo responder con números del 1 al 5 leídos en voz alta (solo piloto).',
+    pregunta: `¿Qué tan fácil le resultó responder con números del 1 al 5? ${OPCIONES}`,
   },
 }
 
@@ -100,7 +114,42 @@ export const FIELD_HELP = {
   grabacion: {
     titulo: 'Grabación de la respuesta',
     texto:
-      'Graba la voz del participante durante esta prueba (autorizada en la afirmación 3 del consentimiento). Púlsela al hacer la pregunta; puede pausarla. Se sube al guardar la respuesta y sirve para revisar después lo que dijo.',
+      'Graba la voz del participante durante esta prueba (autorizada en la afirmación 3 del consentimiento). Púlsela antes de hacer la pregunta; puede pausarla. Se sube al guardar la respuesta y sirve para revisar después lo que dijo. No marca el tiempo de respuesta.',
+  },
+  respuesta_iniciada: {
+    titulo: 'Respuesta iniciada',
+    texto:
+      'Púlselo en el momento en que el participante EMPIEZA a responder la pregunta (no al formularla). El tiempo va desde el fin de la última reproducción del audio. Es una métrica débil: incluye la lectura de la pregunta y la reacción del investigador.',
+  },
+  aclaraciones: {
+    titulo: 'Aclaraciones',
+    texto:
+      'Pulse una vez por cada vez que el participante pida que se le aclare la pregunta o la escala. No cuente aquí las repeticiones del audio: esas se registran solas.',
+  },
+  practica: {
+    titulo: 'Práctica',
+    texto:
+      'Una escena de familiarización, distinta de las evaluadas, para que el participante conozca la voz y el tipo de pregunta antes de OBJ-01. Se registra como ensayo y no cuenta como evidencia.',
+  },
+  ubicacion: {
+    titulo: 'Objeto preguntado',
+    texto:
+      'El objeto por el que se pregunta (se carga de la narrativa). Registre el lado que dijo el participante; la coincidencia con la narrativa se propone sola. No se marca si lo nombró: el investigador lo menciona en la pregunta.',
+  },
+  distancia: {
+    titulo: 'Distancia',
+    texto:
+      'Compare con los pasos que dijo la narrativa. Cuenta como coincidente si el participante da la misma cantidad aproximada o una expresión equivalente («unos cinco pasos», «a cinco pasos»). Una cantidad distinta, o solo «cerca» o «lejos» sin pasos, se marca «No».',
+  },
+  cambio: {
+    titulo: 'Percepción del cambio',
+    texto:
+      'Respuesta a «¿Notó algo distinto respecto a la descripción anterior?». «Cambio real»: menciona que el sofá ya no está al frente o que pasó a la izquierda. Una respuesta vaga («algo cambió») sin decir qué se registra como «No menciona ningún cambio» y se anota en las observaciones.',
+  },
+  audio_congelado: {
+    titulo: 'Audio congelado',
+    texto:
+      'Narrativa y audio generados una sola vez para esta escena; todos los participantes escuchan exactamente el mismo archivo (se verifica su sha256). En las pruebas formales nunca se regenera.',
   },
   transcripcion: {
     titulo: 'Transcripción de la respuesta verbal',
@@ -124,12 +173,7 @@ export const FIELD_HELP = {
   decision: {
     titulo: 'Tarea de decisión',
     texto:
-      'Decisión hipotética a partir del audio: el participante no se mueve. Registre la dirección que eligió. El servidor la compara con la esperada según el diseño de la escena.',
-  },
-  coincide: {
-    titulo: '¿La elección sigue a la narrativa?',
-    texto:
-      'Su juicio como investigador: la elección es coherente con lo que dijo el audio, aunque no coincida con la esperada (por ejemplo, si la narrativa omitió un objeto).',
+      'Decisión hipotética a partir del audio: el participante no se mueve. Registre la dirección que eligió. El servidor la compara por separado con la dirección que indicó la narrativa (comprensión) y con la dirección libre según el diseño de la escena.',
   },
   respuesta_texto: {
     titulo: 'Respuesta del participante',

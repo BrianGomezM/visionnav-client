@@ -178,6 +178,20 @@ export async function fetchStimulusImage(baseUrl: string, imagenUrl: string): Pr
   return new File([blob], `${name}.png`, { type: blob.type || 'image/png' })
 }
 
+/** Audio congelado de un estímulo, en base64, verificado contra su sha256 antes de usarlo. */
+export async function fetchFrozenAudio(baseUrl: string, audioUrl: string, sha256: string): Promise<string> {
+  const res = await apiFetch(`${baseUrl}${audioUrl}`)
+  if (!res.ok) throw new ApiRequestError(await parseApiError(res))
+  const bytes = new Uint8Array(await res.arrayBuffer())
+  const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+  if (digest !== sha256) throw new Error('El audio recibido no coincide con el congelado (sha256). No lo reproduzca.')
+  let bin = ''
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+  return btoa(bin)
+}
+
 /** Grabación de la lectura del consentimiento (sesiones v3 con almacenamiento en el servidor). */
 export async function fetchConsentAudio(baseUrl: string, sessionId: string): Promise<string> {
   const res = await apiFetch(`${baseUrl}/api/study/sessions/${encodeURIComponent(sessionId)}/consentimiento/audio`)
