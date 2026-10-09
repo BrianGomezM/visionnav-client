@@ -13,6 +13,7 @@
 // Tipos del contrato
 // ─────────────────────────────────────────────
 
+/** Solo hay participantes objetivo (2026-10-09). 'piloto' existe solo para leer sesiones anteriores. */
 export type TipoParticipante = 'objetivo' | 'piloto'
 export type TipoCeguera = 'congenita' | 'adquirida' | 'no_aplica'
 export type EtapaAdquisicion = 'infancia' | 'adolescencia' | 'adultez' | 'no_informa'
@@ -358,13 +359,12 @@ export interface SessionSummary extends Partial<SummaryGroup> {
 
 export const TRACK_LABEL: Record<TipoParticipante, string> = {
   objetivo: 'Participante objetivo (ceguera)',
-  piloto: 'Piloto (sin discapacidad visual)',
+  piloto: 'Piloto (sesión anterior, ya no se usa)',
 }
 
 export const CEGUERA_OPTS: [TipoCeguera, string][] = [
   ['congenita', 'Congénita'],
   ['adquirida', 'Adquirida'],
-  ['no_aplica', 'No aplica (participante piloto)'],
 ]
 export const ETAPA_OPTS: [EtapaAdquisicion, string][] = [
   ['infancia', 'Infancia'],
@@ -461,7 +461,7 @@ export const EMPTY_ESCALAS: Escalas = {
 export const CODE_RE = /^P(TEST)?\d{2,3}$/
 export const TEST_CODE_RE = /^PTEST\d{2,3}$/
 
-/** Siguiente código libre (P01, P02… o PTEST01…), a partir de los ya usados (piloto y objetivo comparten la serie). */
+/** Siguiente código libre (P01, P02… o PTEST01…), a partir de los ya usados. */
 export function suggestNextCode(existing: string[], test = false): string {
   const prefix = test ? 'PTEST' : 'P'
   const re = test ? /^PTEST(\d{2,3})$/ : /^P(\d{2,3})$/
@@ -589,16 +589,11 @@ export interface ExecutionRule {
 /**
  * Qué modos admite una prueba en una sesión (mismas reglas que el backend):
  *  - formal: la prueba es de la pista de la sesión y su estímulo está definido (o no lo
- *    necesita). El piloto también registra como formales las actividades objetivo: se
- *    consolidan aparte y validan el instrumento. Una prueba POR_DEFINIR nunca es formal.
- *  - ensayo: en sesiones piloto o de prueba técnica. En el objetivo, solo la práctica.
+ *    necesita). Una prueba POR_DEFINIR nunca es formal.
+ *  - ensayo: solo en sesiones de prueba técnica (PTEST). En una sesión real, solo la práctica.
  */
 export function executionRule(test: CatalogTestLike, tipo: TipoParticipante, esPrueba: boolean): ExecutionRule {
-  const ensayo = tipo === 'piloto' || esPrueba
-  if (tipo === 'piloto' && test.pista === 'objetivo')
-    return test.ejecutable_formal
-      ? { formal: true, ensayo: true, motivo: null }
-      : { formal: false, ensayo: true, motivo: 'Estímulos POR DEFINIR en el catálogo: en el piloto solo como ensayo.' }
+  const ensayo = esPrueba
   if (test.pista !== tipo)
     return {
       formal: false,

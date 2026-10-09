@@ -34,7 +34,6 @@ import {
   type Contexto,
   type Ficha,
   type SessionCreatePayload,
-  type TipoParticipante,
 } from '@/lib/study-protocol'
 import { CONSENT_DOCUMENTS, CONSENT_KEYS, type ActaData, type ConsentKey } from '@/lib/consent'
 import { printConsent } from '@/lib/consent-print'
@@ -95,7 +94,8 @@ export function SessionWizard({
   const [step, setStep] = useState(0)
   const [codigo, setCodigo] = useState(() => suggestNextCode(existingCodes))
   const codeEdited = useRef(false)
-  const [tipo, setTipo] = useState<TipoParticipante | null>(null)
+  // Solo participantes objetivo (decisión de los directores, 2026-10-09).
+  const tipo = 'objetivo' as const
   const [ficha, setFicha] = useState<Ficha>(EMPTY_FICHA)
   const [answers, setAnswers] = useState(EMPTY_ANSWERS)
   const [recording, setRecording] = useState<{ blob: Blob; duration: number | null } | null>(null)
@@ -130,23 +130,6 @@ export function SessionWizard({
     headingRef.current?.focus()
   }, [step])
 
-  // En piloto no hay ceguera; en objetivo no se admite "no aplica". Cada tipo tiene su
-  // propio consentimiento: al cambiar de tipo se descartan respuestas y grabación.
-  useEffect(() => {
-    if (!tipo) return
-    setFicha((f) => ({
-      ...f,
-      condicion_visual:
-        tipo === 'piloto'
-          ? { tipo_ceguera: 'no_aplica', etapa_adquisicion: null, experiencia_visual_previa: null }
-          : f.condicion_visual.tipo_ceguera === 'no_aplica'
-            ? { ...EMPTY_FICHA.condicion_visual }
-            : f.condicion_visual,
-    }))
-    setAnswers(EMPTY_ANSWERS)
-    setRecording(null)
-    setActaImpresa(false)
-  }, [tipo])
 
   const participantErrors = tipo ? validateParticipant(codigo, tipo, ficha) : { tipo: 'Seleccione el tipo de participante.' }
   const duplicate = existingCodes.includes(codigo)
@@ -274,23 +257,10 @@ export function SessionWizard({
       {step === 0 && (
         <div className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
-            <RadioGroupField
-              legend="Tipo de participante"
-              name="tipo"
-              options={[['piloto', TRACK_LABEL.piloto], ['objetivo', TRACK_LABEL.objetivo]]}
-              value={tipo}
-              onChange={setTipo}
-              inline={false}
-              required
-              error={err(participantErrors, 'tipo')}
-              hint={
-                tipo === 'piloto'
-                  ? 'Valida el procedimiento con las mismas actividades (como ensayo) y una encuesta final. No es evidencia de accesibilidad.'
-                  : tipo === 'objetivo'
-                    ? 'Persona con ceguera total: sus respuestas formales son la evidencia del Objetivo 3.'
-                    : 'Determina el consentimiento que se lee y las pruebas de la sesión.'
-              }
-            />
+            <div className="text-sm">
+              <p className="font-medium text-foreground">Tipo de participante</p>
+              <p className="text-muted-foreground">{TRACK_LABEL.objetivo}: sus respuestas formales son la evidencia del Objetivo 3.</p>
+            </div>
             <TextField
               label="Código del participante"
               value={codigo}

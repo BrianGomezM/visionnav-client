@@ -192,6 +192,24 @@ export async function fetchFrozenAudio(baseUrl: string, audioUrl: string, sha256
   return btoa(bin)
 }
 
+/**
+ * Evidencia completa de la sesión (.zip con Excel, registro original y audios). Se descarga
+ * con la clave del investigador (por eso no es un enlace directo).
+ */
+export async function downloadSessionEvidence(baseUrl: string, sessionId: string, codigo: string): Promise<void> {
+  const res = await apiFetch(`${baseUrl}/api/study/sessions/${encodeURIComponent(sessionId)}/export`)
+  if (!res.ok) throw new ApiRequestError(await parseApiError(res))
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? `evidencia_${codigo}.zip`
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
 /** Grabación de la lectura del consentimiento (sesiones v3 con almacenamiento en el servidor). */
 export async function fetchConsentAudio(baseUrl: string, sessionId: string): Promise<string> {
   const res = await apiFetch(`${baseUrl}/api/study/sessions/${encodeURIComponent(sessionId)}/consentimiento/audio`)

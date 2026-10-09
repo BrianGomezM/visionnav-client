@@ -87,7 +87,7 @@ const tabs: {
     id: 'study',
     label: 'Evaluación con usuarios',
     Icon: Users,
-    tooltip: 'Sesiones de prueba con usuarios objetivo (discapacidad visual) y usuarios piloto (validación del instrumento)',
+    tooltip: 'Sesiones de prueba con participantes objetivo (personas con ceguera total)',
     activeBg: 'bg-[#EEEDFE]',
     activeText: 'text-[#7F77DD]',
   },

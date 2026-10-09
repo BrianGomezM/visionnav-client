@@ -4,12 +4,12 @@ import { Download, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CONSENT_DOCUMENTS, CONSENT_KEYS } from '@/lib/consent'
 import { printConsent } from '@/lib/consent-print'
-import type { TipoParticipante } from '@/lib/study-protocol'
+type TipoParticipante = 'objetivo'
 
 const linkClass =
   'inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4B45A8]'
 
-const TIPO_LABEL: Record<TipoParticipante, string> = { piloto: 'personas piloto', objetivo: 'personas objetivo' }
+const TIPO_LABEL: Record<TipoParticipante, string> = { objetivo: 'personas objetivo' }
 
 /** Consentimiento en blanco (v0.4, para imprimir) y documento original v0.3 del investigador. */
 export function ConsentDownloadLinks({ tipo, withLabel = false }: { tipo: TipoParticipante; withLabel?: boolean }) {

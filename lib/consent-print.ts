@@ -1,7 +1,7 @@
 /**
  * Consentimiento y acta (§13) para imprimir o guardar en PDF desde el navegador, con la
  * MISMA estructura que los documentos del investigador (Consentimiento_informado_VisionNav_
- * Personas_{Piloto,Objetivo}): carta, márgenes 4 cm arriba y 2,5 cm en los lados, Times New
+ * Personas_Objetivo): carta, márgenes 4 cm arriba y 2,5 cm en los lados, Times New
  * Roman 12 con interlineado doble y sangría de 1,27 cm, encabezado con el logo de la
  * Universidad del Valle y pie en todas las páginas, portada, secciones 1–12 y §13 en página
  * aparte. El nombre del participante se escribe SOLO en esta hoja: no se envía al servidor.

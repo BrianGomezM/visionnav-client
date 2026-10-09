@@ -74,16 +74,6 @@ export const SCALE_HELP: Record<string, HelpText> = {
     texto: 'Valoración global de las descripciones para orientarse en un lugar desconocido.',
     pregunta: `En general, ¿qué tan útiles le parecen estas descripciones para orientarse en un espacio que no conoce? ${OPCIONES}`,
   },
-  claridad_instrucciones: {
-    titulo: 'Claridad de las instrucciones',
-    texto: 'Si las instrucciones de la sesión se entendieron sin ambigüedad (solo piloto).',
-    pregunta: `Desde el inicio, ¿qué tan claro le quedó lo que se le iba a pedir en cada actividad? ${OPCIONES}`,
-  },
-  comprension_escalas: {
-    titulo: 'Comprensión de las escalas',
-    texto: 'Si el participante pudo responder con números del 1 al 5 leídos en voz alta (solo piloto).',
-    pregunta: `¿Qué tan fácil le resultó responder con números del 1 al 5? ${OPCIONES}`,
-  },
 }
 
 export const FIELD_HELP = {

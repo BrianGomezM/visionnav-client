@@ -11,7 +11,7 @@ import { useResearcherAccess } from '@/hooks/use-backend-profile'
  * nunca incluye ground truth.
  */
 
-export type StudyTrack = 'objetivo' | 'piloto'
+export type StudyTrack = 'objetivo'
 export type TestKind = 'imagen' | 'escala' | 'ruta' | 'texto'
 export type EstadoEstimulos = 'por_definir' | 'no_requiere' | 'definido'
 

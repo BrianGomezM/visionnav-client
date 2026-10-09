@@ -1,8 +1,7 @@
 /**
  * Consentimientos informados del estudio con usuarios (Objetivo Específico 3).
- * Dos documentos distintos, uno por tipo de participante:
- *   - piloto:   Consentimiento_informado_VisionNav_Personas_Piloto_v0.3
- *   - objetivo: Consentimiento_informado_VisionNav_Personas_Objetivo_v0.3
+ * Un documento: Consentimiento_informado_VisionNav_Personas_Objetivo_v0.3 (el documento
+ * piloto se retiró el 2026-10-09: el estudio se aplica solo a participantes objetivo).
  *
  * v0.4 (2026-09-29): texto de los documentos v0.3 del investigador (public/consentimientos/)
  * con las erratas corregidas y el §9 actualizado por decisión del investigador: la
@@ -146,128 +145,6 @@ const afirmacionesLista = (a: Record<ConsentKey, string>): ConsentBlock => ({
 })
 
 // ─────────────────────────────────────────────
-// Personas piloto
-// ─────────────────────────────────────────────
-
-const AFIRMACIONES_PILOTO: Record<ConsentKey, string> = {
-  acepta_participar: 'Entiendo el propósito de la prueba piloto y acepto participar voluntariamente.',
-  puede_detenerse: AFIRMACION_2,
-  autoriza_grabacion: AFIRMACION_3,
-  autoriza_uso_academico:
-    'Autorizo el uso de mis respuestas, observaciones y grabación de audio para el análisis de la prueba piloto y los ajustes del procedimiento de evaluación.',
-}
-
-const PILOTO: ConsentDocument = {
-  version: 'CI-VisionNav-Piloto v0.4',
-  titulo: 'Consentimiento informado — Personas piloto',
-  original_v03: '/consentimientos/Consentimiento_informado_VisionNav_Personas_Piloto_v0.3.docx',
-  afirmaciones: AFIRMACIONES_PILOTO,
-  bloques: [
-    ...ENCABEZADO,
-    { kind: 'heading', text: '1. Invitación a participar' },
-    {
-      kind: 'paragraph',
-      text:
-        'Se le invita a participar en una prueba piloto del sistema VisionNav, desarrollado como parte de un Trabajo de Grado II. ' +
-        'La actividad busca verificar el procedimiento de evaluación y detectar posibles dificultades antes de su aplicación a las ' +
-        'personas participantes de la evaluación principal.',
-    },
-    { kind: 'heading', text: '2. Propósito del estudio' },
-    {
-      kind: 'paragraph',
-      text:
-        'El propósito de esta prueba piloto es verificar la claridad de las instrucciones, actividades y preguntas utilizadas para ' +
-        'evaluar las narrativas auditivas generadas por VisionNav, así como identificar posibles dificultades en el procedimiento, ' +
-        'los tiempos y el registro de las respuestas.',
-    },
-    { kind: 'heading', text: '3. ¿Quién puede participar?' },
-    {
-      kind: 'paragraph',
-      text:
-        'La prueba piloto está dirigida a personas seleccionadas para participar en la validación preliminar del procedimiento. ' +
-        'La participación es individual y se realizará bajo las condiciones establecidas para la prueba piloto.',
-    },
-    { kind: 'heading', text: '4. Procedimiento' },
-    {
-      kind: 'paragraph',
-      text:
-        'La sesión tendrá una duración aproximada de 30 minutos. Durante la actividad, el investigador operará el computador y el ' +
-        'participante interactuará principalmente mediante la escucha de información auditiva y la respuesta verbal, con el fin de ' +
-        'validar el procedimiento de evaluación.',
-    },
-    {
-      kind: 'list',
-      items: [
-        ...PROCEDIMIENTO_COMUN,
-        'Al finalizar la prueba, se realizará una breve encuesta o entrevista verbal sobre aspectos como la claridad de las ' +
-          'instrucciones, comprensión de las actividades, dificultades encontradas y aspectos que puedan mejorarse del procedimiento.',
-        SIN_DESPLAZAMIENTO,
-      ],
-    },
-    { kind: 'heading', text: '5. Grabación de audio' },
-    {
-      kind: 'paragraph',
-      text:
-        'Durante toda la sesión se realizará una grabación de audio de las respuestas verbales del participante. La grabación es ' +
-        'necesaria para realizar el análisis posterior de la prueba piloto y revisar el procedimiento; por esta razón, la ' +
-        'participación en la prueba implica autorizar la grabación de las respuestas.',
-    },
-    {
-      kind: 'paragraph',
-      text:
-        'El audio generado por la herramienta VisionNav que el participante escucha durante la prueba corresponde al funcionamiento ' +
-        'del sistema y es diferente de la grabación de las respuestas del participante. La grabación de las respuestas será ' +
-        'utilizada exclusivamente para fines académicos relacionados con la prueba piloto y este Trabajo de Grado.',
-    },
-    { kind: 'paragraph', text: 'No se realizará grabación de video durante la sesión.' },
-    ...RIESGOS,
-    { kind: 'heading', text: '7. Beneficios' },
-    {
-      kind: 'paragraph',
-      text:
-        'No se garantiza un beneficio directo para el participante. Su participación permitirá identificar posibles dificultades y ' +
-        'realizar ajustes al procedimiento de evaluación antes de su aplicación principal, contribuyendo al análisis académico del sistema.',
-    },
-    ...IDENTIFICACION(
-      'La información obtenida durante la sesión podrá incluir las respuestas verbales del participante, la grabación de audio, ' +
-        'las observaciones realizadas por el investigador y la retroalimentación proporcionada sobre el procedimiento durante la prueba piloto.'
-    ),
-    { kind: 'heading', text: '9. Confidencialidad y almacenamiento' },
-    ...ALMACENAMIENTO('la prueba piloto'),
-    {
-      kind: 'paragraph',
-      text:
-        'La información obtenida durante la prueba piloto se utilizará para revisar y ajustar el procedimiento de evaluación. En caso ' +
-        'de incorporarse resultados al Trabajo de Grado, se presentarán de manera que la identidad del participante no sea utilizada ' +
-        'como parte del análisis o presentación de resultados.',
-    },
-    ...PERIODO,
-    { kind: 'heading', text: '10. Participación voluntaria y retiro' },
-    {
-      kind: 'paragraph',
-      text:
-        'La participación en la prueba piloto es voluntaria. El participante puede decidir no participar o detener su participación ' +
-        'durante la sesión. No tendrá que proporcionar una explicación para hacerlo y su decisión no generará consecuencias académicas.',
-    },
-    ...INFORMACION,
-    { kind: 'heading', text: '12. Consentimiento verbal' },
-    {
-      kind: 'paragraph',
-      text:
-        'Este documento podrá ser leído en voz alta antes de la participación, cuando sea necesario, para facilitar la comprensión ' +
-        'de la información y del procedimiento de la prueba piloto. El investigador verificará que el participante haya comprendido ' +
-        'el propósito, procedimiento, grabación y tratamiento de la información antes de registrar su consentimiento.',
-    },
-    {
-      kind: 'paragraph',
-      text: 'Antes de iniciar, se leerán las siguientes afirmaciones. El participante deberá responder «sí» o «no» a cada una:',
-    },
-    afirmacionesLista(AFIRMACIONES_PILOTO),
-    ...REGISTRO,
-  ],
-}
-
-// ─────────────────────────────────────────────
 // Personas objetivo (ceguera total)
 // ─────────────────────────────────────────────
 
@@ -387,4 +264,5 @@ const OBJETIVO: ConsentDocument = {
   ],
 }
 
-export const CONSENT_DOCUMENTS: Record<TipoParticipante, ConsentDocument> = { piloto: PILOTO, objetivo: OBJETIVO }
+/** Solo participantes objetivo (2026-10-09): el consentimiento piloto se retiró. */
+export const CONSENT_DOCUMENTS: Record<'objetivo', ConsentDocument> = { objetivo: OBJETIVO }

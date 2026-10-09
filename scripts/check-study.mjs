@@ -56,7 +56,6 @@ await check('ficha: condición visual coherente con el tipo', () => {
   const f = ficha()
   f.condicion_visual = { tipo_ceguera: 'no_aplica', etapa_adquisicion: null, experiencia_visual_previa: null }
   assert.ok(m.validateParticipant('PTEST01', 'objetivo', f).tipo_ceguera)
-  assert.equal(m.validateParticipant('PTEST01', 'piloto', f).tipo_ceguera, undefined)
   const g = ficha()
   g.condicion_visual.etapa_adquisicion = null
   assert.ok(m.validateParticipant('PTEST01', 'objetivo', g).etapa_adquisicion)
@@ -106,24 +105,19 @@ await check('entorno técnico automático desde el navegador', () => {
 
 // ── Catálogo: POR_DEFINIR nunca es formal ──
 const obj01 = { id: 'OBJ-01', pista: 'objetivo', tipo: 'imagen', estado_estimulos: 'por_definir', ejecutable_formal: false, requiere_estimulo: true }
-const pil01 = { id: 'PIL-01', pista: 'piloto', tipo: 'escala', estado_estimulos: 'no_requiere', ejecutable_formal: true, requiere_estimulo: false }
-await check('prueba POR_DEFINIR: no formal; ensayo solo en piloto/prueba técnica', () => {
+await check('prueba POR_DEFINIR: no formal; ensayo solo en prueba técnica', () => {
   assert.deepEqual(
     [m.executionRule(obj01, 'objetivo', false).formal, m.executionRule(obj01, 'objetivo', false).ensayo],
     [false, false]
   )
   assert.equal(m.executionRule(obj01, 'objetivo', true).ensayo, true)
   assert.match(m.executionRule(obj01, 'objetivo', true).motivo, /POR DEFINIR/)
-  const piloto = m.executionRule(obj01, 'piloto', false)
-  assert.deepEqual([piloto.formal, piloto.ensayo], [false, true])
 })
-await check('prueba definida: formal en su pista; el piloto también registra las actividades objetivo', () => {
-  assert.equal(m.executionRule(pil01, 'piloto', false).formal, true)
-  assert.equal(m.executionRule(pil01, 'objetivo', false).formal, false)
+await check('prueba definida: formal en una sesión objetivo; ensayo solo en PTEST', () => {
   const defined = { ...obj01, estado_estimulos: 'definido', ejecutable_formal: true }
   assert.equal(m.executionRule(defined, 'objetivo', false).formal, true)
   assert.equal(m.executionRule(defined, 'objetivo', false).ensayo, false)          // objetivo: solo la práctica es ensayo
-  assert.deepEqual([m.executionRule(defined, 'piloto', false).formal, m.executionRule(defined, 'piloto', false).ensayo], [true, true])
+  assert.equal(m.executionRule(defined, 'objetivo', true).ensayo, true)
 })
 
 // ── Audio, repeticiones y respuesta ──
@@ -217,11 +211,10 @@ const unzip = (buf) => {
   }
   return out
 }
-await check('consentimiento: un documento por tipo de participante, igual al del backend', () => {
+await check('consentimiento: solo el documento de participantes objetivo, igual al del backend', () => {
   const docs = consent.CONSENT_DOCUMENTS
-  assert.deepEqual(Object.keys(docs).sort(), ['objetivo', 'piloto'])
-  // Mismas versiones que app/routes/study.py (CONSENT_VERSIONS).
-  assert.equal(docs.piloto.version, 'CI-VisionNav-Piloto v0.4')
+  assert.deepEqual(Object.keys(docs), ['objetivo'])                        // sin piloto (2026-10-09)
+  // Misma versión que app/routes/study.py (CONSENT_VERSIONS).
   assert.equal(docs.objetivo.version, 'CI-VisionNav-Objetivo v0.4')
   assert.deepEqual(consent.CONSENT_KEYS, ['acepta_participar', 'puede_detenerse', 'autoriza_grabacion', 'autoriza_uso_academico'])
   for (const [tipo, d] of Object.entries(docs)) {
@@ -238,7 +231,7 @@ await check('consentimiento: un documento por tipo de participante, igual al del
     assert.ok(statSync(new URL(`public${d.original_v03}`, root)).size > 10_000, d.original_v03)
   }
   assert.ok(JSON.stringify(docs.objetivo.bloques).includes('ceguera total'))
-  assert.ok(JSON.stringify(docs.piloto.bloques).includes('prueba piloto'))
+  assert.throws(() => statSync(new URL('public/consentimientos/Consentimiento_informado_VisionNav_Personas_Piloto_v0.3.docx', root)))
   // El asistente ya no muestra el aviso de borrador ni pide modalidad o referencia del formato.
   const wizard = readFileSync(new URL('components/study/session-wizard.tsx', root), 'utf8')
   for (const s of ['Borrador pendiente', 'Modalidad del consentimiento', 'Referencia del formato', 'Sugerir código', 'Investigador (iniciales'])
@@ -259,9 +252,9 @@ await check('acta (§13): documento completo con la tabla diligenciada y firmas'
     assert.ok(html.includes(s), s)
   // Sin firma de testigo en ningún documento (decisión del investigador).
   for (const d of Object.values(consent.CONSENT_DOCUMENTS)) assert.ok(!consentPrint.consentHtml(d, acta).includes('testigo'))
-  const blank = consentPrint.consentHtml(consent.CONSENT_DOCUMENTS.piloto, null)
+  const blank = consentPrint.consentHtml(consent.CONSENT_DOCUMENTS.objetivo, null)
   assert.ok(!blank.includes('☒') && blank.includes('Sí ☐'))
-  assert.ok(consentPrint.consentHtml(consent.CONSENT_DOCUMENTS.piloto, { ...acta, nombre: '<b>x</b>' }).includes('&lt;b&gt;x'))
+  assert.ok(consentPrint.consentHtml(consent.CONSENT_DOCUMENTS.objetivo, { ...acta, nombre: '<b>x</b>' }).includes('&lt;b&gt;x'))
 })
 await check('narrativa: objetos con su ubicación y relaciones (sugerencias para codificar)', () => {
   const d3 = 'Parece que estás en una sala de estar. Persona a tu derecha a aproximadamente 4 pasos. Sofá a tu izquierda a ' +
@@ -288,9 +281,15 @@ await check('narrativa: objetos con su ubicación y relaciones (sugerencias para
   assert.equal(narrative.narratedLocation('persona'), null)
 })
 const obj01Ref = { id: 'OBJ-01', pista: 'objetivo', tipo: 'imagen', estado_estimulos: 'por_definir', ejecutable_formal: false, requiere_estimulo: true }
-await check('piloto: una actividad POR_DEFINIR solo como ensayo', () => {
-  const r = m.executionRule(obj01Ref, 'piloto', false)
-  assert.deepEqual([r.formal, r.ensayo], [false, true])
+await check('sin pista piloto en el cliente; descarga de evidencia disponible', () => {
+  const r = m.executionRule(obj01Ref, 'objetivo', false)
+  assert.deepEqual([r.formal, r.ensayo], [false, false])
+  const wizard = readFileSync(new URL('components/study/session-wizard.tsx', root), 'utf8')
+  assert.ok(!/TRACK_LABEL\.piloto|'piloto'/.test(wizard), 'el asistente no ofrece el tipo piloto')
+  const tab = readFileSync(new URL('components/tabs/study-tab.tsx', root), 'utf8')
+  assert.match(tab, /DownloadEvidenceButton/)
+  const hook = readFileSync(new URL('hooks/use-study.ts', root), 'utf8')
+  assert.match(hook, /\/export`/)
 })
 await check('anclas definitivas de las escalas y cierre sin preguntas repetidas', () => {
   assert.deepEqual(m.ANCLAS.map(([n]) => n), [1, 2, 3, 4, 5])

@@ -26,6 +26,7 @@ import { TestInfo } from '@/components/study/test-info'
 import { primaryButtonClass } from '@/components/study/form-controls'
 import { TRACK_LABEL, executionRule, type SessionListItem } from '@/lib/study-protocol'
 import { FieldInfo } from '@/components/study/field-info'
+import { DownloadEvidenceButton } from '@/components/study/download-evidence'
 import { FIELD_HELP } from '@/lib/study-help'
 
 /** Identificador interno de la práctica (no es una prueba del catálogo). */
@@ -48,9 +49,8 @@ type View = 'list' | 'wizard' | 'session' | 'close' | 'results'
  * del catálogo en orden → audio CONGELADO de la escena → respuesta y codificación →
  * notas → guardar → siguiente prueba → finalizar (cuestionario breve) → resultados.
  *
- * Piloto: recorre las mismas actividades, con las mismas escenas y audios, registradas
- * como formales en el grupo piloto (consolidado aparte; no es evidencia de
- * accesibilidad), y después las preguntas sobre el procedimiento (PIL-*).
+ * Solo participantes objetivo (decisión de los directores, 2026-10-09). La evidencia de cada
+ * sesión se descarga en un .zip (Excel + audios) con «Descargar evidencia».
  */
 export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
   const sessions = useStudySessions(baseUrl, isActive)
@@ -87,7 +87,7 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
   )
   const otherTrackTests = useMemo(
     () =>
-      sesion && (sesion.tipo_participante === 'piloto' || sesion.es_prueba_tecnica)
+      sesion && sesion.es_prueba_tecnica
         ? (catalogApi.catalog?.pruebas_usuario ?? []).filter((t) => t.pista !== sesion.tipo_participante)
         : [],
     [catalogApi.catalog, sesion]
@@ -100,7 +100,7 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
     () => new Set((detail.data?.respuestas ?? []).map((r) => r.estimulo?.stimulus_id).filter(Boolean) as string[]),
     [detail.data]
   )
-  // Pruebas que esta sesión puede registrar como formales (el piloto incluye las actividades objetivo).
+  // Pruebas que esta sesión puede registrar como formales.
   const formalTests = sesion
     ? [...trackTests, ...otherTrackTests].filter((t) => executionRule(t, sesion.tipo_participante, sesion.es_prueba_tecnica).formal)
     : []
@@ -116,9 +116,7 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
   const selectedTest = isPractice
     ? practiceTest
     : [...trackTests, ...otherTrackTests].find((t) => t.id === selectedTestId) ?? null
-  // Orden de ejecución: en piloto, primero las actividades con audio y luego la encuesta.
-  const isPilot = sesion?.tipo_participante === 'piloto'
-  const orderedTests = isPilot ? [...otherTrackTests, ...trackTests] : [...trackTests, ...otherTrackTests]
+  const orderedTests = [...trackTests, ...otherTrackTests]
 
   const openSession = (id: string, v: View = 'session') => {
     setActiveId(id)
@@ -197,7 +195,6 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
         {view !== 'wizard' && (
           <div className="rounded-xl border border-border bg-card p-4 space-y-2">
             <p className="text-sm font-medium text-foreground">Consentimientos informados (formato impreso)</p>
-            <ConsentDownloadLinks tipo="piloto" withLabel />
             <ConsentDownloadLinks tipo="objetivo" withLabel />
           </div>
         )}
@@ -232,7 +229,8 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
                     {s.num_formales} formal(es), {s.num_respuestas - s.num_formales} ensayo(s)
                   </p>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-1">
+                  <DownloadEvidenceButton baseUrl={baseUrl} sessionId={s.session_id} codigo={s.codigo} compact />
                   {s.estado === 'en_curso' && (
                     <Button variant="outline" size="sm" className="gap-1" onClick={() => openSession(s.session_id)}>
                       <PlayCircle className="w-4 h-4" aria-hidden="true" /> Continuar
@@ -253,7 +251,8 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
         <p className="text-xs text-muted-foreground rounded-xl border border-border bg-muted/20 p-4">
           <strong className="text-foreground">Almacenamiento:</strong> los datos de participantes reales solo se guardan
           si el servidor usa DATA_ROOT (fuera del repositorio); sin él solo se aceptan códigos de prueba (PTEST01…).
-          Las sesiones piloto validan el instrumento; solo las de participantes objetivo son evidencia del Objetivo 3.
+          Solo las respuestas formales de participantes objetivo (P01, P02…) son evidencia del Objetivo 3; las sesiones
+          PTEST son pruebas técnicas. «Descargar evidencia» entrega un .zip por participante con el Excel y todos los audios.
         </p>
 
         <AlertDialog open={toDelete !== null} onOpenChange={(o) => !o && setToDelete(null)}>
@@ -327,7 +326,8 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           {header(title, subtitle)}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <DownloadEvidenceButton baseUrl={baseUrl} sessionId={sesion.session_id} codigo={sesion.codigo} />
             {sesion.estado === 'en_curso' && (
               <Button variant="outline" size="sm" onClick={() => setView('session')}>
                 Ir a las pruebas
@@ -400,7 +400,7 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
     )
   }
 
-  const blockedFormal = !isPilot && trackTests.length > 0 && formalTests.length === 0
+  const blockedFormal = trackTests.length > 0 && formalTests.length === 0
 
   return (
     <div className="space-y-6">
@@ -468,24 +468,7 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
               <FieldInfo help={FIELD_HELP.practica} />
             </div>
           )}
-          {isPilot ? (
-            <>
-              <h4 className="text-sm font-medium text-foreground">1. Actividades (mismas escenas y audios; grupo piloto)</h4>
-              <ul className="space-y-2">{otherTrackTests.map(renderTest)}</ul>
-              <h4 className="text-sm font-medium text-foreground pt-2">2. Encuesta sobre el procedimiento</h4>
-              <ul className="space-y-2">{trackTests.map(renderTest)}</ul>
-            </>
-          ) : (
-            <>
-              <ul className="space-y-2">{trackTests.map(renderTest)}</ul>
-              {otherTrackTests.length > 0 && (
-                <details>
-                  <summary className="text-sm text-muted-foreground cursor-pointer">Pruebas de la otra pista (solo ensayo)</summary>
-                  <ul className="space-y-2 mt-2">{otherTrackTests.map(renderTest)}</ul>
-                </details>
-              )}
-            </>
-          )}
+          <ul className="space-y-2">{trackTests.map(renderTest)}</ul>
         </nav>
 
         <div ref={runnerRef} className="lg:col-span-2 scroll-mt-20">
