@@ -39,6 +39,7 @@ import { CONSENT_DOCUMENTS, CONSENT_KEYS, type ActaData, type ConsentKey } from 
 import { printConsent } from '@/lib/consent-print'
 import { ConsentDownloadLinks, ConsentText } from '@/components/study/consent-document'
 import { AudioRecorder } from '@/components/study/participant-recorder'
+import { MeetingAudioControl } from '@/components/study/meeting-audio-control'
 
 const STEPS = ['Participante', 'Consentimiento', 'Confirmar'] as const
 
@@ -448,6 +449,7 @@ export function SessionWizard({
             </ol>
           </div>
 
+          <MeetingAudioControl />
           <AudioRecorder
             key={tipo}
             title="Grabación de la lectura del consentimiento (obligatoria)"

@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Mic, Square, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { openRecordingStream, useMeetingAudio } from '@/lib/meeting-audio'
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
 /**
- * Grabadora de voz con el micrófono del computador (MediaRecorder). Entrega el audio
+ * Grabadora de voz (MediaRecorder): micrófono del computador y, si está conectado,
+ * el audio de la reunión (lib/meeting-audio.ts). Entrega el audio
  * al detener; el componente que la usa decide cuándo subirlo al servidor.
  */
 export function AudioRecorder({
@@ -22,16 +24,17 @@ export function AudioRecorder({
   onChange: (blob: Blob | null, durationS: number | null) => void
 }) {
   const recRef = useRef<MediaRecorder | null>(null)
+  const releaseRef = useRef<(() => void) | null>(null)
   const chunks = useRef<Blob[]>([])
   const startedAt = useRef<number>(0)
+  const meeting = useMeetingAudio()
+  const [mixed, setMixed] = useState(false)
   const [recording, setRecording] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => () => {
-    recRef.current?.stream.getTracks().forEach((t) => t.stop())
-  }, [])
+  useEffect(() => () => releaseRef.current?.(), [])
 
   useEffect(() => () => {
     if (url) URL.revokeObjectURL(url)
@@ -50,12 +53,15 @@ export function AudioRecorder({
       return
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const { stream, release, mixed: withMeeting } = await openRecordingStream()
+      releaseRef.current = release
+      setMixed(withMeeting)
       const rec = new MediaRecorder(stream)
       chunks.current = []
       rec.ondataavailable = (e) => e.data.size && chunks.current.push(e.data)
       rec.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop())
+        release()
+        releaseRef.current = null
         const duration = (performance.now() - startedAt.current) / 1000
         const blob = new Blob(chunks.current, { type: rec.mimeType || 'audio/webm' })
         setElapsed(duration)
@@ -106,8 +112,13 @@ export function AudioRecorder({
         )}
       </div>
       <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
-        {recording ? 'Grabando…' : url ? `${readyText} Duración: ${fmt(elapsed)}.` : ''}
+        {recording
+          ? mixed ? 'Grabando micrófono y audio de la reunión…' : 'Grabando solo el micrófono…'
+          : url ? `${readyText} Duración: ${fmt(elapsed)}.` : ''}
       </p>
+      {!recording && !url && !meeting.stream && (
+        <p className="text-xs text-[#B54708]">El audio de la reunión no está conectado: solo se grabará su micrófono.</p>
+      )}
       {error && (
         <p role="alert" className="text-sm text-[#B42318]">
           {error}
@@ -146,17 +157,18 @@ export function ResponseRecorder({
   onChange: (blob: Blob | null) => void
 }) {
   const recRef = useRef<MediaRecorder | null>(null)
+  const releaseRef = useRef<(() => void) | null>(null)
   const chunks = useRef<Blob[]>([])
   const acc = useRef(0)
+  const meeting = useMeetingAudio()
+  const [mixed, setMixed] = useState(false)
   const since = useRef(0)
   const [state, setState] = useState<'idle' | 'recording' | 'paused' | 'done'>('idle')
   const [elapsed, setElapsed] = useState(0)
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => () => {
-    recRef.current?.stream.getTracks().forEach((t) => t.stop())
-  }, [])
+  useEffect(() => () => releaseRef.current?.(), [])
   useEffect(() => () => {
     if (url) URL.revokeObjectURL(url)
   }, [url])
@@ -173,12 +185,15 @@ export function ResponseRecorder({
       return
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const { stream, release, mixed: withMeeting } = await openRecordingStream()
+      releaseRef.current = release
+      setMixed(withMeeting)
       const rec = new MediaRecorder(stream)
       chunks.current = []
       rec.ondataavailable = (e) => e.data.size && chunks.current.push(e.data)
       rec.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop())
+        release()
+        releaseRef.current = null
         const blob = new Blob(chunks.current, { type: rec.mimeType || 'audio/webm' })
         setUrl(URL.createObjectURL(blob))
         onChange(blob)
@@ -224,12 +239,16 @@ export function ResponseRecorder({
           <Mic className="w-4 h-4" aria-hidden="true" /> Grabar respuesta
         </Button>
       )}
+      {state === 'idle' && !meeting.stream && (
+        <span className="text-xs text-[#B54708]">Reunión no conectada: solo micrófono</span>
+      )}
       {(state === 'recording' || state === 'paused') && (
         <>
           <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[#B42318]">
             <span className={`w-2.5 h-2.5 rounded-full bg-[#B42318] ${state === 'recording' ? 'animate-pulse' : 'opacity-40'}`} aria-hidden="true" />
             {state === 'recording' ? 'Grabando' : 'En pausa'} {fmt(elapsed)}
           </span>
+          <span className="text-xs text-muted-foreground">{mixed ? 'micrófono + reunión' : 'solo micrófono'}</span>
           {state === 'recording' ? (
             <Button type="button" size="sm" variant="outline" onClick={pause}>
               Pausar

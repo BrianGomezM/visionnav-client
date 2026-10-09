@@ -27,6 +27,7 @@ import { primaryButtonClass } from '@/components/study/form-controls'
 import { TRACK_LABEL, executionRule, type SessionListItem } from '@/lib/study-protocol'
 import { FieldInfo } from '@/components/study/field-info'
 import { DownloadEvidenceButton } from '@/components/study/download-evidence'
+import { MeetingAudioControl } from '@/components/study/meeting-audio-control'
 import { FIELD_HELP } from '@/lib/study-help'
 
 /** Identificador interno de la práctica (no es una prueba del catálogo). */
@@ -417,6 +418,8 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
         </div>
       </div>
       <p role="status" aria-live="polite" className="sr-only">{announce}</p>
+
+      <MeetingAudioControl />
 
       <div>
         <p className="text-sm text-foreground" id="progress-label">
