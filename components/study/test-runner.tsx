@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, HelpCircle, ImageIcon, Lock, Plus, ScanSearch, Timer, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, HelpCircle, ImageIcon, Lock, ScanSearch, Timer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorCard } from '@/components/shared/error-card'
@@ -59,7 +59,7 @@ export const STUDY_TTS_MODEL = 'azure:es-CO-SalomeNeural'
 const secs = (ms: number | null | undefined) => (ms === null || ms === undefined ? '—' : `${(ms / 1000).toFixed(1)} s`)
 
 type StepId = 'audio' | 'respuesta' | 'notas'
-const STEP_LABEL: Record<StepId, string> = { audio: 'Escena y audio', respuesta: 'Respuesta', notas: 'Notas y guardar' }
+const STEP_LABEL: Record<StepId, string> = { audio: 'Escena y audio', respuesta: 'Respuesta', notas: 'Guardar' }
 
 /** Lo que escuchó el participante: audio congelado o, solo en ensayos, generado en la sesión. */
 interface Heard {
@@ -74,7 +74,7 @@ interface Heard {
  *      asignada (todos escuchan el mismo archivo); en un ensayo puede generarse en vivo.
  *   2. Respuesta: transcripción y solo la codificación que la prueba pregunta
  *      (catálogo → codificacion), decisión, cambio percibido o criterios 1–5.
- *   3. Notas y guardar: comentarios del participante, observaciones e incidencias.
+ *   3. Guardar la respuesta.
  * La barra fija tiene la grabación, «Respuesta iniciada» (tiempo de respuesta) y el
  * contador de aclaraciones. Con `practice` se ejecuta la escena de práctica como ensayo.
  */
@@ -156,9 +156,11 @@ export function TestRunner({
       ? decisionDef?.fixtures_tecnicos.find((f) => f.stimulus_id === sid) ?? null
       : null
   const [criterios, setCriterios] = useState<Record<string, number | null>>({})
-  const [errores, setErrores] = useState<ErrorRegistrado[]>([])
-  const [comentarios, setComentarios] = useState('')
-  const [observaciones, setObservaciones] = useState('')
+  // Notas, observaciones e incidencias se retiraron del formulario (2026-10-10):
+  // se envían vacías para conservar el formato del registro.
+  const errores: ErrorRegistrado[] = []
+  const comentarios = ''
+  const observaciones = ''
   const [recording, setRecording] = useState<Blob | null>(null)
   const [saved, setSaved] = useState<StudyResponseRecord | null>(null)
   const [saveNote, setSaveNote] = useState<string | null>(null)
@@ -764,84 +766,9 @@ export function TestRunner({
               </div>
             )}
 
-            {/* ── 3. Notas y guardar ── */}
+            {/* ── 3. Guardar ── */}
             {current === 'notas' && (
               <div className="space-y-5">
-                <TextAreaField
-                  label="Comentarios del participante"
-                  value={comentarios}
-                  onChange={setComentarios}
-                  rows={2}
-                  info={FIELD_HELP.comentarios}
-                  hint="Incluya lo que le resultó confuso y las respuestas abiertas de la prueba."
-                />
-                <TextAreaField
-                  label="Observaciones del investigador"
-                  value={observaciones}
-                  onChange={setObservaciones}
-                  rows={2}
-                  info={FIELD_HELP.observaciones}
-                  hint="Sin nombres."
-                />
-                <details className="rounded-lg border border-border p-4" open={errores.length > 0}>
-                  <summary className="text-sm font-medium cursor-pointer">
-                    Incidencias técnicas o de procedimiento ({errores.length})
-                  </summary>
-                  <div className="mt-3 space-y-2">
-                    <p className="text-xs text-muted-foreground">{FIELD_HELP.errores.texto}</p>
-                    {errores.map((e, i) => (
-                      <div key={i} className="grid sm:grid-cols-[auto_1fr_auto] gap-2 items-end">
-                        <div>
-                          <label htmlFor={`${uid}-et${i}`} className="text-xs text-muted-foreground block">
-                            Tipo
-                          </label>
-                          <select
-                            id={`${uid}-et${i}`}
-                            className={inputClass}
-                            value={e.tipo}
-                            onChange={(ev) =>
-                              setErrores((p) => p.map((x, j) => (j === i ? { ...x, tipo: ev.target.value as ErrorRegistrado['tipo'] } : x)))
-                            }
-                          >
-                            <option value="tecnico">Técnico</option>
-                            <option value="procedimiento">Procedimiento</option>
-                            <option value="otro">Otro</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label htmlFor={`${uid}-ed${i}`} className="text-xs text-muted-foreground block">
-                            Descripción
-                          </label>
-                          <input
-                            id={`${uid}-ed${i}`}
-                            className={inputClass}
-                            value={e.descripcion}
-                            onChange={(ev) => setErrores((p) => p.map((x, j) => (j === i ? { ...x, descripcion: ev.target.value } : x)))}
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Quitar incidencia ${i + 1}`}
-                          onClick={() => setErrores((p) => p.filter((_, j) => j !== i))}
-                        >
-                          <Trash2 className="w-4 h-4" aria-hidden="true" />
-                        </Button>
-                      </div>
-                    ))}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1"
-                      onClick={() => setErrores((p) => [...p, { tipo: 'tecnico', descripcion: '' }])}
-                    >
-                      <Plus className="w-3 h-3" aria-hidden="true" /> Añadir incidencia
-                    </Button>
-                  </div>
-                </details>
-
                 {recording === null && canRecord && (
                   <p className="text-xs text-muted-foreground">Sin grabación de la respuesta en esta prueba (opcional).</p>
                 )}

@@ -18,9 +18,9 @@ type Motivo = 'completada' | 'retiro_participante' | 'interrumpida_tecnica'
 
 /**
  * Cierre de la sesión: cuestionario posterior breve (solo claridad y esfuerzo: lo demás
- * ya se preguntó en OBJ-05/06/07), notas de la entrevista semiestructurada breve y
- * registro técnico (incluye lo que antes era PIL-03). Después la sesión no admite
- * respuestas nuevas.
+ * ya se preguntó en OBJ-05/06/07). Las notas de entrevista, incidencias y
+ * observaciones se retiraron (2026-10-10) y se envían vacías. Después la sesión no
+ * admite respuestas nuevas.
  */
 export function SessionClose({
   isLoading,
@@ -38,9 +38,6 @@ export function SessionClose({
   const [motivo, setMotivo] = useState<Motivo>('completada')
   const [escalas, setEscalas] = useState<Escalas>(EMPTY_ESCALAS)
   const [comentarios, setComentarios] = useState('')
-  const [entrevista, setEntrevista] = useState('')
-  const [incidencias, setIncidencias] = useState('')
-  const [observaciones, setObservaciones] = useState('')
 
   return (
     <section aria-labelledby="close-title" className="rounded-xl border border-border bg-card p-6 shadow-sm space-y-5">
@@ -81,21 +78,6 @@ export function SessionClose({
         ))}
         <TextAreaField label="Comentarios del cuestionario" value={comentarios} onChange={setComentarios} rows={2} />
       </fieldset>
-      <TextAreaField
-        label="Entrevista semiestructurada breve (notas)"
-        value={entrevista}
-        onChange={setEntrevista}
-        rows={4}
-        hint="Qué resultó confuso, qué faltó o sobró, sugerencias. Sin nombres."
-      />
-      <TextAreaField
-        label="Registro técnico: incidencias"
-        value={incidencias}
-        onChange={setIncidencias}
-        rows={2}
-        hint="Fallas observadas en toda la sesión (audio que no carga, demoras, errores visibles), aunque el participante no las mencione."
-      />
-      <TextAreaField label="Observaciones generales" value={observaciones} onChange={setObservaciones} rows={2} />
       {error && <ErrorCard message={error} />}
       <div className="flex justify-between gap-2">
         <Button variant="outline" onClick={onCancel}>
@@ -108,9 +90,9 @@ export function SessionClose({
             onClose({
               motivo,
               cuestionario_posterior: { escalas: cleanEscalas(escalas) ?? {}, comentarios: comentarios.trim() || null },
-              entrevista: entrevista.trim() || null,
-              incidencias_tecnicas: incidencias.trim() || null,
-              observaciones_generales: observaciones.trim() || null,
+              entrevista: null,
+              incidencias_tecnicas: null,
+              observaciones_generales: null,
             })
           }
         >
