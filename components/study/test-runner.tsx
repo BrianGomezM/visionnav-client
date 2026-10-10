@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, HelpCircle, ImageIcon, Lock, ScanSearch, Timer } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, HelpCircle, ImageIcon, Lock, Pencil, ScanSearch } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorCard } from '@/components/shared/error-card'
@@ -10,43 +10,36 @@ import { DegradationNotice } from '@/components/shared/degradation-notice'
 import { useDetect } from '@/hooks/use-detect'
 import { fetchFrozenAudio, fetchStimulusImage, friendlyError, useStudyActions } from '@/hooks/use-study'
 import type { CatalogStimulus, CatalogUserTest, FrozenAudio } from '@/hooks/use-catalog'
-import { ComprehensionCoder } from '@/components/study/comprehension-coder'
 import { StudyAudioPlayer } from '@/components/study/study-audio-player'
 import { ResponseRecorder } from '@/components/study/participant-recorder'
+import { ReferenceCoder } from '@/components/study/reference-coder'
 import { FieldInfo } from '@/components/study/field-info'
 import { TestInfo } from '@/components/study/test-info'
-import { LikertField, RadioGroupField, TextAreaField, inputClass, primaryButtonClass } from '@/components/study/form-controls'
+import { LikertField, RadioGroupField, inputClass, primaryButtonClass } from '@/components/study/form-controls'
 import { FIELD_HELP, SCALE_HELP } from '@/lib/study-help'
 import {
   ACLARACION_OPTS,
   ANCLAS_TEXTO,
   EMPTY_ESCALAS,
-  PERCEPCION_CAMBIO_OPTS,
   base64ToBytes,
   buildResponsePayload,
   executionRule,
   saveBlockers,
   sha256Hex,
   type Aclaracion,
-  type Comprension,
   type Ejecucion,
-  type ErrorRegistrado,
   type ExecutionRule,
   type ModoRegistro,
-  type PercepcionCambio,
   type PlayEvent,
   type Sesion,
   type StudyResponseRecord,
   type TipoAclaracion,
 } from '@/lib/study-protocol'
+import { EMPTY_CODING, LADO_TEXTO, codingBlockers, codingFromRecord, codingToPayload, type CodingState } from '@/lib/study-coding'
 import { cn } from '@/lib/utils'
 
-const FUENTE_ESPERADA: Record<string, string> = {
-  definicion: 'diseño de la escena',
-  fixture_tecnico: 'fixture técnico (solo PTEST, no es evidencia)',
-  no_definida: 'no definida',
-}
-
+const DIR_TEXTO: Record<string, string> = { izquierda: 'izquierda', frente: 'al frente', derecha: 'derecha', no_responde: 'no responde' }
+const dirs = (xs: string[] | null | undefined) => (xs?.length ? xs.map((x) => DIR_TEXTO[x] ?? x).join(', ') : '—')
 const yesNo = (v: boolean | null | undefined) => (v === null || v === undefined ? 'no evaluable' : v ? 'sí' : 'no')
 
 /**
@@ -58,8 +51,8 @@ export const STUDY_TTS_MODEL = 'azure:es-CO-SalomeNeural'
 
 const secs = (ms: number | null | undefined) => (ms === null || ms === undefined ? '—' : `${(ms / 1000).toFixed(1)} s`)
 
-type StepId = 'audio' | 'respuesta' | 'notas'
-const STEP_LABEL: Record<StepId, string> = { audio: 'Escena y audio', respuesta: 'Respuesta', notas: 'Guardar' }
+type StepId = 'audio' | 'preguntas'
+const STEP_LABEL: Record<StepId, string> = { audio: 'Audio', preguntas: 'Preguntas y guardar' }
 
 /** Lo que escuchó el participante: audio congelado o, solo en ensayos, generado en la sesión. */
 interface Heard {
@@ -68,15 +61,29 @@ interface Heard {
   audioBase64: string | null
 }
 
+/** Ejecución guardada → el formato que acepta el servidor (sin campos añadidos al guardar). */
+function cleanEjecucion(e: NonNullable<StudyResponseRecord['ejecucion']>): Ejecucion {
+  return {
+    request_id: e.request_id ?? null,
+    narrativa_final: e.narrativa_final,
+    escenario: e.escenario ?? null,
+    degradaciones: e.degradaciones ?? [],
+    umbral_confianza: e.umbral_confianza ?? null,
+    tts_modelo: e.tts_modelo ?? null,
+    audio: { disponible: e.audio.disponible, content_type: e.audio.content_type, sha256: e.audio.sha256, tamano_bytes: e.audio.tamano_bytes },
+  }
+}
+
 /**
- * Ejecución de UNA prueba del catálogo dentro de una sesión, por pasos:
- *   1. Escena y audio: en una prueba formal se carga el audio CONGELADO de la escena
- *      asignada (todos escuchan el mismo archivo); en un ensayo puede generarse en vivo.
- *   2. Respuesta: transcripción y solo la codificación que la prueba pregunta
- *      (catálogo → codificacion), decisión, cambio percibido o criterios 1–5.
- *   3. Guardar la respuesta.
- * La barra fija tiene la grabación, «Respuesta iniciada» (tiempo de respuesta) y el
- * contador de aclaraciones. Con `practice` se ejecuta la escena de práctica como ensayo.
+ * Ejecución de UNA prueba del catálogo dentro de una sesión (estudio v2):
+ *   1. Audio: en una prueba formal se carga el audio CONGELADO de la escena asignada (todos
+ *      escuchan el mismo archivo); en un ensayo puede generarse en vivo.
+ *   2. Preguntas y guardar: las preguntas de la prueba con sus respuestas definidas según la
+ *      narrativa (el investigador marca; la respuesta completa queda grabada), las escalas 1–5
+ *      y el botón de guardar.
+ * El componente queda montado al cambiar de prueba, así que lo marcado no se pierde. Una
+ * respuesta guardada se puede editar: la corrección se guarda como una versión nueva que
+ * reemplaza a la anterior (el servidor conserva ambas).
  */
 export function TestRunner({
   baseUrl,
@@ -87,6 +94,8 @@ export function TestRunner({
   onSaved,
   onNext,
   practice = false,
+  active = true,
+  existing = null,
 }: {
   baseUrl: string
   sesion: Sesion
@@ -96,8 +105,14 @@ export function TestRunner({
   onSaved: (r: StudyResponseRecord) => void
   onNext: () => void
   practice?: boolean
+  /** false cuando la prueba está oculta (otra seleccionada): se pausa el audio. */
+  active?: boolean
+  /** Respuesta vigente ya guardada de esta prueba en la sesión (para verla o editarla). */
+  existing?: StudyResponseRecord | null
 }) {
   const uid = useId()
+  const rootRef = useRef<HTMLElement>(null)
+  const closed = sesion.estado !== 'en_curso'
   const rule: ExecutionRule = practice
     ? { formal: false, ensayo: true, motivo: null }
     : executionRule(test, sesion.tipo_participante, sesion.es_prueba_tecnica)
@@ -105,16 +120,26 @@ export function TestRunner({
   const actions = useStudyActions(baseUrl)
   // Umbral null: el servidor aplica el congelado (0.35), no el de Ajustes.
   const detect = useDetect({ baseUrl, confidenceThreshold: null, ttsModel: STUDY_TTS_MODEL })
-  const cod = test.codificacion ?? []
-  const codesComprehension = cod.some((c) => c !== 'cambio')
+  const cod = practice ? [] : test.codificacion ?? []
+  const decisionDef = practice ? null : test.decision ?? null
+  const referencia = practice ? null : test.referencia ?? null
 
-  const steps: StepId[] = test.requiere_estimulo ? ['audio', 'respuesta', 'notas'] : ['respuesta', 'notas']
+  // ── Edición de una respuesta guardada ──
+  const [editing, setEditing] = useState(false)
+  const editSource = editing ? existing : null
+
+  const steps: StepId[] = test.requiere_estimulo && !editSource ? ['audio', 'preguntas'] : ['preguntas']
   const [step, setStep] = useState(0)
   const panelRef = useRef<HTMLDivElement>(null)
   const goStep = (i: number) => {
     setStep(i)
     requestAnimationFrame(() => panelRef.current?.focus())
   }
+
+  // Al ocultarse (se eligió otra prueba) se pausa cualquier audio que esté sonando.
+  useEffect(() => {
+    if (!active) rootRef.current?.querySelectorAll('audio').forEach((a) => a.pause())
+  }, [active])
 
   // ── Estímulo ──
   const assigned = practice
@@ -132,35 +157,18 @@ export function TestRunner({
   const [loadingStimulus, setLoadingStimulus] = useState(false)
   const [stimulusError, setStimulusError] = useState<string | null>(null)
 
-  // ── Lo escuchado, reproducciones y tiempos ──
+  // ── Lo escuchado y las reproducciones ──
   const [heard, setHeard] = useState<Heard | null>(null)
   const [loadingAudio, setLoadingAudio] = useState(false)
   const [audioError, setAudioError] = useState<string | null>(null)
   const [plays, setPlays] = useState<PlayEvent[]>([])
-  const lastEndedRef = useRef<number | null>(null)
-  const [audioEnded, setAudioEnded] = useState(false)
-  const [tiempoMs, setTiempoMs] = useState<number | null>(null)
   const [serverMs, setServerMs] = useState<number | null>(null)
   const [aclaraciones, setAclaraciones] = useState<Aclaracion[]>([])
   const [tipoAclaracion, setTipoAclaracion] = useState<TipoAclaracion>('pregunta')
 
   // ── Respuesta ──
-  const [transcripcion, setTranscripcion] = useState('')
-  const [comprension, setComprension] = useState<Comprension>({ objetos: [], objetos_inventados: [], relaciones: [] })
-  // Decisión (tipo C): la alternativa esperada NUNCA llega al cliente; la aplica el servidor.
-  const decisionDef = test.decision ?? null
-  const [seleccion, setSeleccion] = useState<string | null>(null)
-  const [cambio, setCambio] = useState<PercepcionCambio | null>(null)
-  const fixtureFor = (sid: string) =>
-    sesion.es_prueba_tecnica && modo === 'ensayo'
-      ? decisionDef?.fixtures_tecnicos.find((f) => f.stimulus_id === sid) ?? null
-      : null
+  const [coding, setCoding] = useState<CodingState>(EMPTY_CODING)
   const [criterios, setCriterios] = useState<Record<string, number | null>>({})
-  // Notas, observaciones e incidencias se retiraron del formulario (2026-10-10):
-  // se envían vacías para conservar el formato del registro.
-  const errores: ErrorRegistrado[] = []
-  const comentarios = ''
-  const observaciones = ''
   const [recording, setRecording] = useState<Blob | null>(null)
   const [saved, setSaved] = useState<StudyResponseRecord | null>(null)
   const [saveNote, setSaveNote] = useState<string | null>(null)
@@ -171,20 +179,24 @@ export function TestRunner({
     if (previewUrl) URL.revokeObjectURL(previewUrl)
   }, [previewUrl])
 
-  useEffect(() => {
-    if (saved) savedRef.current?.focus()
-  }, [saved])
+  const startEdit = () => {
+    if (!existing) return
+    setCoding(codingFromRecord(existing, referencia))
+    setCriterios({ ...(existing.criterios ?? {}) })
+    setAclaraciones(existing.aclaraciones ?? [])
+    setRecording(null)
+    setSaved(null)
+    setSaveNote(null)
+    setStep(0)
+    setEditing(true)
+  }
 
   const resetExecution = useCallback(() => {
     detect.reset()
     setHeard(null)
     setAudioError(null)
     setPlays([])
-    lastEndedRef.current = null
-    setAudioEnded(false)
-    setTiempoMs(null)
     setServerMs(null)
-    setComprension({ objetos: [], objetos_inventados: [], relaciones: [] })
   }, [detect])
 
   const selectCatalogStimulus = async (s: CatalogStimulus) => {
@@ -211,11 +223,11 @@ export function TestRunner({
   // Una sola escena asignada: se carga sola (todos los participantes escuchan la misma).
   const autoSelected = useRef(false)
   useEffect(() => {
-    if (autoSelected.current || !modo || !test.requiere_estimulo || assignedStimuli.length !== 1) return
+    if (autoSelected.current || existing || !modo || !test.requiere_estimulo || assignedStimuli.length !== 1) return
     autoSelected.current = true
     void selectCatalogStimulus(assignedStimuli[0])
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modo, assignedStimuli.length])
+  }, [modo, assignedStimuli.length, existing])
 
   const selectLocalFile = (f: File | null) => {
     setStimulusId(null)
@@ -281,128 +293,163 @@ export function TestRunner({
     })
   }
 
-  /** Inicio de la respuesta verbal: desde el fin de la última reproducción del audio. */
-  const markResponse = () => {
-    if (lastEndedRef.current !== null && tiempoMs === null) setTiempoMs(performance.now() - lastEndedRef.current)
-  }
-
   const audioOk = Boolean(heard?.audioBase64 && heard.ejecucion.audio.content_type)
-  const blockers = modo
+  const effModo: ModoRegistro | null = editSource ? editSource.modo : modo
+  const blockers = effModo
     ? [
-        ...saveBlockers({
-          requiereEstimulo: test.requiere_estimulo,
-          modo,
-          hasExecution: Boolean(heard),
-          audioAvailable: audioOk,
-          plays: plays.length,
-        }),
-        ...(modo === 'formal' && test.requiere_estimulo && heard && heard.origen !== 'congelado'
+        ...(editSource
+          ? []
+          : saveBlockers({
+              requiereEstimulo: test.requiere_estimulo,
+              modo: effModo,
+              hasExecution: Boolean(heard),
+              audioAvailable: audioOk,
+              plays: plays.length,
+            })),
+        ...(!editSource && effModo === 'formal' && test.requiere_estimulo && heard && heard.origen !== 'congelado'
           ? ['Una prueba formal solo reproduce el audio congelado de la escena.']
           : []),
-        ...(decisionDef && !seleccion ? ['Registre la alternativa que eligió el participante (o "No responde").'] : []),
-        ...(cod.includes('cambio') && modo === 'formal' && !cambio ? ['Registre si el participante percibió el cambio.'] : []),
+        ...(effModo === 'formal' || decisionDef ? codingBlockers(cod, referencia, coding, Boolean(decisionDef)) : []),
       ]
     : ['Esta prueba no puede ejecutarse en esta sesión.']
 
   const save = async () => {
-    if (!modo || blockers.length) return
+    if (!effModo || blockers.length) return
+    const cp = codingToPayload(cod, referencia, coding)
     const payload = buildResponsePayload({
       pruebaId: test.id,
-      modo,
-      estimulo: test.requiere_estimulo
-        ? stimulusId
-          ? { origen: 'catalogo', stimulus_id: stimulusId }
-          : { origen: 'archivo_local', nombre_archivo: localFile?.name }
-        : undefined,
-      ejecucion: test.requiere_estimulo && heard ? heard.ejecucion : undefined,
+      modo: effModo,
+      estimulo: editSource
+        ? (editSource.estimulo?.stimulus_id
+            ? { origen: 'catalogo', stimulus_id: editSource.estimulo.stimulus_id }
+            : editSource.estimulo ? { origen: 'archivo_local', nombre_archivo: editSource.estimulo.nombre_archivo } : undefined)
+        : test.requiere_estimulo
+          ? stimulusId
+            ? { origen: 'catalogo', stimulus_id: stimulusId }
+            : { origen: 'archivo_local', nombre_archivo: localFile?.name }
+          : undefined,
+      ejecucion: editSource ? (editSource.ejecucion ? cleanEjecucion(editSource.ejecucion) : undefined) : test.requiere_estimulo && heard ? heard.ejecucion : undefined,
       // El audio congelado ya está en el servidor: no se reenvía.
-      audioBase64: test.requiere_estimulo && heard?.origen === 'generado_en_sesion' ? heard.audioBase64 : null,
-      plays,
-      tiempoRespuestaMs: tiempoMs,
-      transcripcion,
-      comprension,
+      audioBase64: !editSource && test.requiere_estimulo && heard?.origen === 'generado_en_sesion' ? heard.audioBase64 : null,
+      plays: editSource ? editSource.reproducciones : plays,
+      tiempoRespuestaMs: editSource ? (editSource as StudyResponseRecord & { tiempo_respuesta_ms?: number | null }).tiempo_respuesta_ms ?? null : null,
+      transcripcion: '',
+      comprension: cp.comprension ?? { objetos: [], objetos_inventados: [], relaciones: [] },
       codificacion: cod,
-      decision: decisionDef && seleccion ? { seleccionada: seleccion, coincide_con_narrativa: null } : undefined,
-      percepcionCambio: cod.includes('cambio') ? cambio : null,
+      decision: decisionDef && coding.direcciones.length ? { seleccionadas: coding.direcciones, coincide_con_narrativa: null } : undefined,
+      percepcionCambio: cp.percepcion_cambio ?? null,
+      cambiosPercibidos: cp.cambios_percibidos,
+      cambioOtro: cp.cambio_otro,
+      reemplaza: editSource?.response_id ?? null,
       aclaraciones,
       escalas: EMPTY_ESCALAS,
       criterios: Object.fromEntries(Object.entries(criterios).filter(([, v]) => v !== null)) as Record<string, number>,
-      errores,
+      errores: [],
       aspectosConfusos: '',
-      comentarios,
-      observaciones,
+      comentarios: '',
+      observaciones: '',
     })
     const result = await actions.addResponse.run(sesion.session_id, payload)
     if (!result) return
     let note: string | null = null
     if (recording) {
       const up = await actions.uploadRecording.run(sesion.session_id, result.respuesta.response_id, recording)
-      note = up ? 'Grabación del participante guardada.' : `La respuesta se guardó, pero la grabación no: ${actions.uploadRecording.error ?? 'error'}`
+      note = up ? 'Grabación guardada.' : `La respuesta se guardó, pero la grabación no: ${actions.uploadRecording.error ?? 'error'}`
     }
     setSaveNote(note)
     setSaved(result.respuesta)
+    setEditing(false)
     onSaved(result.respuesta)
+    requestAnimationFrame(() => savedRef.current?.focus())
   }
 
   // ─────────────────────────────────────────────
-  if (saved) {
-    const m = saved.metricas
-    const d = saved.decision
+  // Respuesta guardada (recién guardada o ya registrada en la sesión)
+  // ─────────────────────────────────────────────
+  const shown = editing ? null : saved ?? existing
+  if (shown) {
+    const m = shown.metricas
+    const d = shown.decision
+    const rel = shown.comprension?.relaciones?.[0]
     return (
-      <div
-        ref={savedRef}
-        tabIndex={-1}
-        role="status"
-        className="rounded-xl border border-[#1D9E75]/40 bg-[#E1F5EE] p-6 space-y-3 focus:outline-none"
-      >
-        <p className="flex items-center gap-2 font-medium text-[#0F5C47]">
-          <CheckCircle2 className="w-5 h-5" aria-hidden="true" />
-          Respuesta {saved.response_id} guardada (
-          {practice ? 'práctica, no cuenta como evidencia' : saved.modo === 'formal' ? 'prueba formal' : 'ensayo, no cuenta como evidencia'})
-        </p>
-        {cod.includes('objetos') && (
-          <p className="text-sm text-[#0F5C47]">
-            Objetos identificados: {m.objetos_identificados}/{m.objetos_referencia} · inventados: {m.objetos_inventados.length}
+      <section ref={rootRef}>
+        <div
+          ref={savedRef}
+          tabIndex={-1}
+          role="status"
+          className="rounded-xl border border-[#1D9E75]/40 bg-[#E1F5EE] p-6 space-y-3 focus:outline-none"
+        >
+          <p className="flex items-center gap-2 font-medium text-[#0F5C47]">
+            <CheckCircle2 className="w-5 h-5" aria-hidden="true" />
+            {practice ? 'Práctica' : `${test.id} · ${test.nombre}`}: respuesta {shown.response_id} guardada
+            {shown.reemplaza ? ` (corrige ${shown.reemplaza})` : ''}
+            {practice ? ' — no cuenta como evidencia' : shown.modo === 'formal' ? '' : ' — ensayo, no cuenta como evidencia'}
           </p>
-        )}
-        {cod.includes('relaciones') && (
-          <p className="text-sm text-[#0F5C47]">
-            Relaciones comprendidas: {m.relaciones_comprendidas}/{m.relaciones_evaluadas}
-          </p>
-        )}
-        {(cod.includes('ubicacion') || cod.includes('distancia')) && (
-          <p className="text-sm text-[#0F5C47]">
-            Ubicación coincidente: {m.ubicaciones_correctas}/{m.ubicaciones_evaluadas} · distancia coincidente:{' '}
-            {m.distancias_correctas ?? 0}/{m.distancias_evaluadas ?? 0}
-          </p>
-        )}
-        {d && (
-          <p className="text-sm text-[#0F5C47]">
-            Eligió <strong>{d.seleccionada}</strong> · la narrativa indicó {d.direccion_narrativa ?? '—'} (¿la siguió?{' '}
-            <strong>{yesNo(d.coincide_con_narrativa)}</strong>) · según el diseño de la escena: {d.esperada ?? '—'} (¿coincide?{' '}
-            <strong>{yesNo(d.correcto)}</strong>)
-            {d.fuente_esperada !== 'definicion' && ` · referencia: ${FUENTE_ESPERADA[d.fuente_esperada]}`}
-          </p>
-        )}
-        {saved.percepcion_cambio && (
-          <p className="text-sm text-[#0F5C47]">
-            Cambio: {PERCEPCION_CAMBIO_OPTS.find(([k]) => k === saved.percepcion_cambio)?.[1]}
-          </p>
-        )}
-        {test.requiere_estimulo && (
-          <p className="text-sm text-[#0F5C47]">
-            Repeticiones: {m.repeticiones_audio} · aclaraciones: {m.aclaraciones ?? 0}
-          </p>
-        )}
-        {saveNote && <p className="text-sm text-[#0F5C47]">{saveNote}</p>}
-        <Button onClick={onNext} className={primaryButtonClass}>
-          Siguiente prueba
-        </Button>
-      </div>
+          {cod.includes('objetos') && (
+            <p className="text-sm text-[#0F5C47]">
+              Objetos que nombró: {m.objetos_identificados} de {m.objetos_referencia}
+              {m.objetos_inventados.length ? ` · mencionó y no estaban: ${m.objetos_inventados.join(', ')}` : ''}
+            </p>
+          )}
+          {rel && (
+            <p className="text-sm text-[#0F5C47]">
+              Pregunta de relación: respondió «{rel.respuesta ?? '—'}» · {rel.comprendida === 'si' ? 'correcto' : rel.comprendida === 'no' ? 'incorrecto' : 'sin respuesta'}
+            </p>
+          )}
+          {cod.includes('ubicacion') && (
+            <ul className="text-sm text-[#0F5C47] list-disc pl-5">
+              {(shown.comprension?.objetos ?? []).map((o) => (
+                <li key={o.objeto}>
+                  {o.objeto}: {o.ubicacion_reportada ?? 'sin lado'} ({o.ubicacion_correcta === 'si' ? 'coincide' : o.ubicacion_correcta === 'no' ? 'no coincide' : '—'})
+                  {' · '}
+                  {o.distancia_reportada ?? 'sin pasos'} ({o.distancia_correcta === 'si' ? 'coincide' : o.distancia_correcta === 'no' ? 'no coincide' : '—'})
+                </li>
+              ))}
+            </ul>
+          )}
+          {shown.percepcion_cambio && (
+            <p className="text-sm text-[#0F5C47]">
+              ¿Notó cambios? {shown.percepcion_cambio === 'no_menciona_cambio' ? 'No' : shown.percepcion_cambio === 'no_responde' ? 'No responde' : 'Sí'}
+              {shown.cambios_percibidos?.length ? ` · mencionó: ${shown.cambios_percibidos.join('; ')}` : ''}
+              {shown.cambio_otro ? ` · otro: ${shown.cambio_otro}` : ''}
+            </p>
+          )}
+          {d && (
+            <p className="text-sm text-[#0F5C47]">
+              Dijo que podría avanzar: <strong>{dirs(d.seleccionadas ?? (d.seleccionada ? d.seleccionada.split('+') : []))}</strong> · la
+              descripción indicó: {DIR_TEXTO[d.direccion_narrativa ?? ''] ?? '—'} · ¿solo las salidas libres de la escena?{' '}
+              <strong>{yesNo(d.correcto)}</strong>
+            </p>
+          )}
+          {shown.criterios && Object.keys(shown.criterios).length > 0 && (
+            <p className="text-sm text-[#0F5C47]">
+              {Object.entries(shown.criterios)
+                .map(([k, v]) => `${SCALE_HELP[k]?.titulo ?? k}: ${v}`)
+                .join(' · ')}
+            </p>
+          )}
+          {test.requiere_estimulo && <p className="text-sm text-[#0F5C47]">Repeticiones del audio: {m.repeticiones_audio}</p>}
+          {saveNote && <p className="text-sm text-[#0F5C47]">{saveNote}</p>}
+          <div className="flex flex-wrap gap-2">
+            {!practice && existing && (
+              <Button variant="outline" onClick={startEdit} className="gap-2">
+                <Pencil className="w-4 h-4" aria-hidden="true" /> Editar respuesta
+              </Button>
+            )}
+            {!closed && (
+              <Button onClick={onNext} className={primaryButtonClass}>
+                Siguiente
+              </Button>
+            )}
+          </div>
+        </div>
+      </section>
     )
   }
 
-  const current = steps[step]
+  if (closed && !editing) return null
+
+  const current = steps[Math.min(step, steps.length - 1)]
   const stimulusButton = (s: CatalogStimulus) => (
     <Button
       key={s.stimulus_id}
@@ -417,33 +464,34 @@ export function TestRunner({
       {s.stimulus_id}
       {s.audio_congelado && <Lock className="w-3 h-3 ml-1" aria-label="con audio congelado" />}
       {usedStimuli.has(s.stimulus_id) && <span className="text-xs ml-1">(ya usado)</span>}
-      {fixtureFor(s.stimulus_id) && <span className="text-xs ml-1">(fixture técnico {fixtureFor(s.stimulus_id)!.id})</span>}
     </Button>
   )
   // En vivo solo en ensayos sin audio congelado (la práctica también usa el congelado).
   const canGenerateLive = modo === 'ensayo' && !practice && !frozen && Boolean(file)
+  const narrativa = editSource?.ejecucion?.narrativa_final ?? heard?.ejecucion.narrativa_final ?? null
 
   return (
-    <section aria-labelledby={`${uid}-title`} className="rounded-xl border border-border bg-card shadow-sm">
-      <div className="p-6 pb-4 space-y-4">
+    <section ref={rootRef} aria-labelledby={`${uid}-title`} className="rounded-xl border border-border bg-card shadow-sm">
+      <div className="p-6 pb-4 space-y-3">
         <div className="flex items-start gap-1">
           <div className="flex-1">
             <div className="flex items-center">
               <h3 id={`${uid}-title`} className="font-medium text-foreground">
                 {practice ? 'Práctica (familiarización)' : `${test.id} · ${test.nombre}`}
+                {editSource && ` — editando ${editSource.response_id}`}
               </h3>
               {practice && <FieldInfo help={FIELD_HELP.practica} />}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               {practice
-                ? 'Escena distinta de las evaluadas. Use la pregunta de OBJ-01 para que el participante conozca la voz y el formato. No es evidencia.'
+                ? 'Para que el participante conozca la voz. Pregunte: «¿Qué objetos mencionó la descripción?». No es evidencia.'
                 : test.objetivo}
             </p>
           </div>
           {!practice && <TestInfo test={test} rule={rule} done={false} />}
         </div>
 
-        {rule.motivo && (
+        {rule.motivo && !editSource && (
           <div role="note" className="flex gap-2 p-3 rounded-lg bg-[#FFFAEB] border border-[#B54708]/30 text-[#7A2E0E] text-sm">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
             <p>
@@ -452,7 +500,7 @@ export function TestRunner({
             </p>
           </div>
         )}
-        {rule.formal && rule.ensayo && (
+        {rule.formal && rule.ensayo && !editSource && (
           <RadioGroupField
             legend="Modo de registro"
             name="modo"
@@ -470,9 +518,9 @@ export function TestRunner({
         )}
       </div>
 
-      {modo && (
+      {effModo && (
         <>
-          {/* ── Barra fija: pasos, grabación, respuesta iniciada y aclaraciones ── */}
+          {/* ── Barra fija: pasos, grabación y aclaraciones ── */}
           <div className="sticky top-16 z-20 border-y border-border bg-card/95 backdrop-blur px-6 py-3 space-y-2">
             <div role="tablist" aria-label={`Pasos de ${test.id}`} className="flex flex-wrap gap-1.5">
               {steps.map((s, i) => (
@@ -481,12 +529,12 @@ export function TestRunner({
                   id={`${uid}-tab-${s}`}
                   type="button"
                   role="tab"
-                  aria-selected={i === step}
+                  aria-selected={s === current}
                   aria-controls={`${uid}-panel`}
                   onClick={() => goStep(i)}
                   className={cn(
                     'rounded-full px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4B45A8]',
-                    i === step ? 'bg-[#4B45A8] text-white' : 'bg-muted text-foreground hover:bg-[#EEEDFE]'
+                    s === current ? 'bg-[#4B45A8] text-white' : 'bg-muted text-foreground hover:bg-[#EEEDFE]'
                   )}
                 >
                   {i + 1}. {STEP_LABEL[s]}
@@ -498,24 +546,6 @@ export function TestRunner({
                 <div className="flex items-center">
                   <ResponseRecorder onStart={() => undefined} onChange={setRecording} />
                   <FieldInfo help={FIELD_HELP.grabacion} />
-                </div>
-              )}
-              {test.requiere_estimulo && (
-                <div className="flex items-center">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={markResponse}
-                    disabled={!audioEnded || tiempoMs !== null}
-                    className="gap-2"
-                  >
-                    <Timer className="w-4 h-4" aria-hidden="true" /> Respuesta iniciada
-                  </Button>
-                  <FieldInfo help={FIELD_HELP.respuesta_iniciada} />
-                  <span className="text-xs text-muted-foreground ml-2" aria-live="polite">
-                    {tiempoMs !== null ? `Tiempo: ${secs(tiempoMs)}` : audioEnded ? 'Púlselo cuando el participante empiece a responder' : 'Tras el audio'}
-                  </span>
                 </div>
               )}
               <div className="flex items-center gap-1">
@@ -556,11 +586,12 @@ export function TestRunner({
             tabIndex={-1}
             className="p-6 space-y-5 focus:outline-none"
           >
-            {/* ── 1. Escena y audio (el reproductor se mantiene montado entre pasos) ──
-                 Orden pensado para el investigador: primero el reproductor y la narrativa
-                 (lo que se usa en cada prueba); la imagen, que el participante no ve, plegada. */}
-            {test.requiere_estimulo && (
+            {/* ── 1. Audio (el reproductor se mantiene montado entre pasos) ── */}
+            {test.requiere_estimulo && !editSource && (
               <div hidden={current !== 'audio'} className="space-y-3">
+                <p className="text-sm rounded-lg bg-[#EEEDFE] text-[#2E2A6B] p-3">
+                  Diga: «Le pondré un audio. Escúchelo con atención; al terminar le haré unas preguntas.»
+                </p>
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="font-medium text-foreground">
                     {practice ? 'Escena de práctica:' : assignedStimuli.length ? 'Escena asignada:' : 'Escena (ensayo):'}
@@ -580,10 +611,10 @@ export function TestRunner({
                 {detect.error && <ErrorCard message={detect.error} />}
                 {audioError && <ErrorCard message={audioError} />}
                 {modo === 'formal' && stimulusId && !frozen && (
-                  <ErrorCard message="Esta escena no tiene audio congelado: no puede registrarse como prueba formal. Genere el conjunto con scripts/study/freeze_study_audio.py en el backend." />
+                  <ErrorCard message="Esta escena no tiene audio congelado: no puede registrarse como prueba formal." />
                 )}
                 <p role="status" aria-live="polite" className="sr-only">
-                  {detect.isLoading || loadingAudio ? 'Cargando el audio.' : heard ? 'Narrativa y audio listos.' : ''}
+                  {detect.isLoading || loadingAudio ? 'Cargando el audio.' : heard ? 'Audio listo.' : ''}
                 </p>
 
                 {heard && (
@@ -599,28 +630,21 @@ export function TestRunner({
                             contentType={heard.ejecucion.audio.content_type!}
                             plays={plays}
                             onPlay={(e) => setPlays((p) => [...p, e])}
-                            onEnded={(at) => {
-                              lastEndedRef.current = at
-                              setAudioEnded(true)
-                            }}
+                            onEnded={() => undefined}
                           />
                         </div>
                         <FieldInfo help={FIELD_HELP.audio} />
                       </div>
                     ) : (
-                      <ErrorCard message="No hay audio del sistema para este estímulo: no lo presente al participante. Reintente o registre la incidencia (no se admite como prueba formal)." />
+                      <ErrorCard message="No hay audio del sistema para este estímulo: no lo presente al participante." />
                     )}
                     <div className="p-3 rounded-lg bg-muted/30 text-sm">
-                      <p className="text-xs text-muted-foreground mb-1">
-                        Narrativa (solo la ve el investigador) ·{' '}
-                        {heard.origen === 'congelado' ? 'audio congelado, sha256 verificado' : 'generada en esta sesión (ensayo)'}
-                      </p>
+                      <p className="text-xs text-muted-foreground mb-1">Lo que dice el audio (solo lo ve el investigador)</p>
                       <p className="text-foreground">{heard.ejecucion.narrativa_final}</p>
                     </div>
                     {heard.origen === 'generado_en_sesion' && (
                       <p className="text-xs text-muted-foreground">
-                        Generación: {secs(serverMs)} en total · voz (TTS) {secs(detect.data?.metricas?.tts_ms)} · detección y texto{' '}
-                        {secs(detect.data?.metricas?.total_ms)}
+                        Generación: {secs(serverMs)} · voz {secs(detect.data?.metricas?.tts_ms)}
                         <FieldInfo help={FIELD_HELP.tiempo_tts} />
                       </p>
                     )}
@@ -630,7 +654,7 @@ export function TestRunner({
                 {stimulusId && frozen && !heard && !loadingAudio && (
                   <div className="flex items-center gap-1">
                     <Button onClick={() => loadFrozen()} className={cn('flex-1 gap-2', primaryButtonClass)}>
-                      <Lock className="w-4 h-4" aria-hidden="true" /> Cargar el audio congelado de la escena
+                      <Lock className="w-4 h-4" aria-hidden="true" /> Cargar el audio de la escena
                     </Button>
                     <FieldInfo help={FIELD_HELP.audio_congelado} />
                   </div>
@@ -649,7 +673,7 @@ export function TestRunner({
                     ) : (
                       <>
                         {file ? <ScanSearch className="w-4 h-4" aria-hidden="true" /> : <ImageIcon className="w-4 h-4" aria-hidden="true" />}
-                        {heard?.origen === 'generado_en_sesion' ? 'Volver a generar en vivo (solo ensayo)' : 'Generar narrativa y audio en vivo (solo ensayo)'}
+                        Generar narrativa y audio en vivo (solo ensayo)
                       </>
                     )}
                   </Button>
@@ -657,7 +681,7 @@ export function TestRunner({
                 {modo === 'ensayo' && !practice && (
                   <details className="text-sm">
                     <summary className="cursor-pointer text-muted-foreground">
-                      {assignedStimuli.length ? 'Usar otra escena o una imagen local (solo ensayo)' : 'Escenas del Dataset 1 o imagen local'}
+                      {assignedStimuli.length ? 'Usar otra escena o una imagen local (solo ensayo)' : 'Otras escenas o imagen local'}
                     </summary>
                     <div className="mt-2 space-y-2">
                       <div className="flex flex-wrap gap-2">{otherStimuli.map(stimulusButton)}</div>
@@ -672,11 +696,11 @@ export function TestRunner({
                 )}
                 {previewUrl && stimulusId && (
                   <details className="text-sm">
-                    <summary className="cursor-pointer text-muted-foreground">Ver imagen del estímulo (solo investigador)</summary>
+                    <summary className="cursor-pointer text-muted-foreground">Ver imagen de la escena (solo investigador)</summary>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={previewUrl}
-                      alt={`Estímulo ${stimulusId} (vista del investigador)`}
+                      alt={`Escena ${stimulusId} (vista del investigador)`}
                       className="mt-2 max-h-56 rounded-lg border border-border"
                     />
                   </details>
@@ -684,70 +708,37 @@ export function TestRunner({
               </div>
             )}
 
-            {/* ── 2. Respuesta ── */}
-            {current === 'respuesta' && (
+            {/* ── 2. Preguntas y guardar ── */}
+            {current === 'preguntas' && (
               <div className="space-y-5">
-                {(test.tipo === 'imagen' || test.tipo === 'ruta' || test.tipo === 'texto') && (
-                  <TextAreaField
-                    label={test.tipo === 'texto' ? 'Respuesta del participante' : 'Transcripción de la respuesta verbal'}
-                    value={transcripcion}
-                    onChange={setTranscripcion}
-                    rows={3}
-                    info={test.tipo === 'texto' ? FIELD_HELP.respuesta_texto : FIELD_HELP.transcripcion}
-                    hint={canRecord ? 'Opcional si la respuesta quedó grabada.' : 'Tal cual, sin corregir.'}
-                  />
+                {narrativa && (
+                  <details className="text-sm rounded-lg bg-muted/30 p-3">
+                    <summary className="cursor-pointer text-xs text-muted-foreground">Ver lo que dijo el audio</summary>
+                    <p className="mt-2 text-foreground">{narrativa}</p>
+                  </details>
+                )}
+                {referencia?.objetos && cod.includes('objetos') && (
+                  <p className="text-xs text-muted-foreground">
+                    Objetos de la descripción:{' '}
+                    {referencia.objetos.map((o) => `${o.nombre} (${LADO_TEXTO[o.lado]}${o.pasos !== null ? `, ${o.pasos} pasos` : ''})`).join(' · ')}
+                  </p>
                 )}
 
-                {codesComprehension && (
-                  <div className="rounded-lg border border-border p-4">
-                    <ComprehensionCoder
-                      value={comprension}
-                      onChange={setComprension}
-                      narrative={heard?.ejecucion.narrativa_final ?? null}
-                      codificacion={cod}
-                    />
-                  </div>
+                {practice ? (
+                  <p className="text-sm text-foreground">
+                    Pregunte: «¿Qué objetos mencionó la descripción?». Si tiene dudas, explíquele de nuevo la dinámica: para eso es la práctica.
+                  </p>
+                ) : (
+                  <ReferenceCoder codificacion={cod} referencia={referencia} decision={decisionDef} value={coding} onChange={setCoding} />
                 )}
 
-                {cod.includes('cambio') && (
-                  <RadioGroupField
-                    legend="1. ¿Percibió el cambio respecto a la descripción anterior?"
-                    name={`${uid}-cambio`}
-                    options={PERCEPCION_CAMBIO_OPTS}
-                    value={cambio}
-                    onChange={setCambio}
-                    required={modo === 'formal'}
-                    info={FIELD_HELP.cambio}
-                  />
-                )}
-
-                {decisionDef && (
-                  <section aria-labelledby={`${uid}-dec`} className="rounded-lg border border-border p-4 space-y-3">
-                    <h4 id={`${uid}-dec`} className="text-sm font-medium text-foreground">
-                      {cod.includes('cambio') ? '2. ' : ''}Tarea de decisión
-                      <FieldInfo help={FIELD_HELP.decision} />
-                    </h4>
-                    <p className="text-sm">
-                      <strong>Pregunta:</strong> {decisionDef.pregunta}
-                    </p>
-                    <RadioGroupField
-                      legend="Alternativa que eligió el participante"
-                      name={`${uid}-seleccion`}
-                      options={[...decisionDef.alternativas.map((a) => [a.id, a.texto] as [string, string]), ['no_responde', 'No responde']]}
-                      value={seleccion}
-                      onChange={setSeleccion}
-                      required
-                    />
-                  </section>
-                )}
-
-                {test.criterios && test.criterios.length > 0 && (
+                {test.criterios && test.criterios.length > 0 && !practice && (
                   <fieldset className="rounded-lg border border-border p-4">
                     <legend className="text-sm font-medium px-1">
-                      Criterios de la prueba (1–5)
+                      Preguntas con escala del 1 al 5
                       <FieldInfo help={FIELD_HELP.criterios} />
                     </legend>
-                    <p className="text-xs text-muted-foreground">Lea siempre las cinco opciones: {ANCLAS_TEXTO}.</p>
+                    <p className="text-xs text-muted-foreground">Lea siempre las opciones: {ANCLAS_TEXTO}.</p>
                     {test.criterios.map((c) => {
                       const h = SCALE_HELP[c]
                       return (
@@ -763,15 +754,7 @@ export function TestRunner({
                     })}
                   </fieldset>
                 )}
-              </div>
-            )}
 
-            {/* ── 3. Guardar ── */}
-            {current === 'notas' && (
-              <div className="space-y-5">
-                {recording === null && canRecord && (
-                  <p className="text-xs text-muted-foreground">Sin grabación de la respuesta en esta prueba (opcional).</p>
-                )}
                 {actions.addResponse.error && <ErrorCard message={actions.addResponse.error} />}
                 {blockers.length > 0 && (
                   <ul className="text-xs text-[#7A2E0E] list-disc pl-5" aria-label="Pendiente antes de guardar">
@@ -780,22 +763,29 @@ export function TestRunner({
                     ))}
                   </ul>
                 )}
-                <Button
-                  onClick={save}
-                  disabled={actions.addResponse.isLoading || blockers.length > 0}
-                  className={`w-full gap-2 ${primaryButtonClass}`}
-                >
-                  {actions.addResponse.isLoading ? (
-                    <>
-                      <Spinner className="w-4 h-4" /> Guardando…
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Guardar respuesta (
-                      {practice ? 'práctica' : modo === 'formal' ? 'formal' : 'ensayo'})
-                    </>
+                <div className="flex flex-wrap gap-2">
+                  {editSource && (
+                    <Button variant="outline" onClick={() => setEditing(false)}>
+                      Cancelar edición
+                    </Button>
                   )}
-                </Button>
+                  <Button
+                    onClick={save}
+                    disabled={actions.addResponse.isLoading || blockers.length > 0}
+                    className={`flex-1 gap-2 ${primaryButtonClass}`}
+                  >
+                    {actions.addResponse.isLoading ? (
+                      <>
+                        <Spinner className="w-4 h-4" /> Guardando…
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" aria-hidden="true" />{' '}
+                        {editSource ? 'Guardar corrección' : `Guardar respuesta${practice ? ' (práctica)' : effModo === 'ensayo' ? ' (ensayo)' : ''}`}
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
 

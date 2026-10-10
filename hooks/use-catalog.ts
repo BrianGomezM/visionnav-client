@@ -37,6 +37,32 @@ export interface CatalogUserTest {
   disponibilidad: { investigador: boolean; participante: boolean }
   /** Tarea de decisión (app/catalog/decisiones.yaml). Nunca incluye la alternativa esperada. */
   decision?: DecisionDefinition | null
+  /** Respuesta de referencia según la narrativa congelada (asignaciones.yaml), para marcar sin escribir. */
+  referencia?: Referencia | null
+}
+
+export type Lado = 'izquierda' | 'frente' | 'derecha'
+
+/** Un objeto tal como lo dijo la narrativa: nombre, lado y pasos aproximados. */
+export interface RefObjeto {
+  nombre: string
+  /** Cómo se nombra en la pregunta, con artículo («la persona», «el sofá»). */
+  articulo?: string
+  lado: Lado
+  pasos: number | null
+}
+
+/** Referencia de una prueba (siempre frente a la narrativa escuchada, no frente a la imagen). */
+export interface Referencia {
+  /** OBJ-01: objetos de la descripción; OBJ-02: objetos por los que se pregunta. */
+  objetos?: RefObjeto[]
+  /** OBJ-01: pregunta de relación entre los objetos y su respuesta según la descripción
+   *  (p. ej. «De esos objetos, ¿cuál está más lejos de usted?» → «Las personas»). */
+  relacion?: { pregunta: string; respuesta: string }
+  /** OBJ-04: cambios reales respecto a la escena anterior, en palabras simples. */
+  cambios?: string[]
+  /** Dirección que indicó la descripción (informativo para el investigador). */
+  direccion_narrativa?: Lado | null
 }
 
 export interface DecisionDefinition {

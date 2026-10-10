@@ -13,66 +13,66 @@ export interface HelpText {
   registro?: string
 }
 
-// Anclas verbales únicas (1 nada · 2 poco · 3 moderadamente · 4 bastante · 5 muy), leídas
-// completas en cada pregunta (definidas el 2026-10-01, docs/EVALUACION_USUARIOS.md §0).
-const OPCIONES = 'Responda con un número: 1 nada, 2 poco, 3 moderadamente, 4 bastante o 5 muy.'
+// Anclas verbales únicas, leídas completas en cada pregunta. Estudio v2 (2026-10-10): palabras
+// cotidianas que se entienden a la primera, sin términos técnicos.
+const OPCIONES = 'Responda con un número: 1 nada, 2 poco, 3 más o menos, 4 bastante o 5 mucho.'
 
 /** Escalas 1–5 (valoraciones subjetivas y criterios de las pruebas de escala). */
 export const SCALE_HELP: Record<string, HelpText> = {
   claridad: {
-    titulo: 'Claridad de las descripciones',
-    texto: 'Si las descripciones se entendieron sin esfuerzo: palabras comprensibles, frases ordenadas, sin ambigüedad.',
-    pregunta: `Pensando en todas las descripciones, ¿qué tan claras le parecieron? ${OPCIONES}`,
+    titulo: 'Facilidad para entender las descripciones',
+    texto: 'Si las descripciones se entendieron sin esfuerzo.',
+    pregunta: `En general, ¿qué tan fácil fue entender las descripciones? ${OPCIONES}`,
   },
   inteligibilidad: {
-    titulo: 'Inteligibilidad de la voz',
-    texto: 'Si se entendían las palabras que pronunciaba la voz (ITU-T P.85), no el contenido.',
-    pregunta: `¿Qué tan fácil fue entender las palabras que decía la voz? ${OPCIONES}`,
+    titulo: 'Se entiende lo que dice la voz',
+    texto: 'Si se entendían las palabras que pronunciaba la voz (no el contenido).',
+    pregunta: `¿Qué tan fácil fue entender lo que decía la voz? ${OPCIONES}`,
   },
   utilidad: {
     titulo: 'Utilidad',
-    texto: 'Si la información le serviría para hacerse una idea del lugar y orientarse.',
+    texto: 'Si la información le serviría para saber qué hay a su alrededor.',
     pregunta: `¿Qué tan útil le resultó esta descripción para saber qué hay a su alrededor? ${OPCIONES}`,
   },
   suficiencia: {
-    titulo: 'Suficiencia de la información',
-    texto: 'Si la descripción dio la información necesaria, sin que faltara algo importante.',
-    pregunta: `Pensando en todas las descripciones, ¿qué tan suficiente fue la información para hacerse una idea del lugar? ${OPCIONES}`,
+    titulo: 'Información suficiente',
+    texto: 'Si las descripciones dieron la información necesaria para imaginar el lugar.',
+    pregunta: `¿Las descripciones le dieron suficiente información para imaginarse el lugar? ${OPCIONES}`,
   },
   naturalidad_voz: {
-    titulo: 'Naturalidad de la voz',
-    texto: 'Cómo suena la voz sintética (entonación, ritmo, pronunciación), no el contenido de lo que dice.',
-    pregunta: `Sin pensar en lo que dijo, ¿qué tan natural le sonó la voz? ${OPCIONES}`,
+    titulo: 'Parecido a una persona',
+    texto: 'Cómo suena la voz, no lo que dice.',
+    pregunta: `¿Qué tanto se parece la voz a la de una persona? ${OPCIONES}`,
   },
   carga_percibida: {
-    titulo: 'Carga percibida',
-    texto: 'Esfuerzo mental que le exigió escuchar y recordar las descripciones (adaptado del ítem de demanda mental del NASA-TLX; un solo ítem, no validado). Más alto = más esfuerzo.',
-    pregunta: `¿Qué tanto esfuerzo le costó seguir las descripciones? ${OPCIONES}`,
+    titulo: 'Esfuerzo',
+    texto: 'Cuánto esfuerzo le costó escuchar y recordar las descripciones. Más alto = más esfuerzo.',
+    pregunta: `¿Cuánto esfuerzo le costó seguir las descripciones? ${OPCIONES}`,
   },
   redundancia: {
-    titulo: 'Redundancia',
-    texto: 'Si las descripciones repitieron información o fueron más largas de lo necesario. Más alto = más repetitivas.',
-    pregunta: `Pensando en todas las descripciones, ¿qué tan repetitivas le parecieron? ${OPCIONES}`,
+    titulo: 'Repetían cosas',
+    texto: 'Si las descripciones repetían información. Más alto = más repetitivas.',
+    pregunta: `¿Sintió que las descripciones repetían cosas? ${OPCIONES}`,
   },
   velocidad: {
-    titulo: 'Velocidad',
-    texto: 'Si el ritmo del habla fue adecuado para entender.',
-    pregunta: `¿Qué tan adecuada le pareció la velocidad de la voz? ${OPCIONES} Si no fue adecuada, ¿fue lenta o rápida?`,
+    titulo: 'Ritmo cómodo',
+    texto: 'Si la voz habló a un ritmo cómodo para entender.',
+    pregunta: `¿La voz habló a un ritmo cómodo para usted? ${OPCIONES} (Si responde 1 o 2: «¿Le pareció lenta o rápida?»)`,
   },
   naturalidad: {
-    titulo: 'Naturalidad',
-    texto: 'Cómo suena la voz sintética, no el contenido.',
-    pregunta: `¿Qué tan natural le sonó la voz? ${OPCIONES}`,
+    titulo: 'Parecido a una persona',
+    texto: 'Cómo suena la voz, no lo que dice.',
+    pregunta: `¿Qué tanto se parece la voz a la de una persona? ${OPCIONES}`,
   },
   volumen: {
-    titulo: 'Volumen',
-    texto: 'Si el volumen fue cómodo con el dispositivo de la sesión.',
-    pregunta: `¿Qué tan cómodo le pareció el volumen? ${OPCIONES}`,
+    titulo: 'Volumen cómodo',
+    texto: 'Si el volumen fue cómodo para escuchar.',
+    pregunta: `¿El volumen fue cómodo para escuchar? ${OPCIONES}`,
   },
   utilidad_general: {
-    titulo: 'Utilidad general',
-    texto: 'Valoración global de las descripciones para orientarse en un lugar desconocido.',
-    pregunta: `En general, ¿qué tan útiles le parecen estas descripciones para orientarse en un espacio que no conoce? ${OPCIONES}`,
+    titulo: 'Utilidad',
+    texto: 'Qué tan útiles le parecen las descripciones para moverse en un lugar que no conoce.',
+    pregunta: `¿Qué tan útil le parecería una descripción así para moverse en un lugar que no conoce? ${OPCIONES}`,
   },
 }
 

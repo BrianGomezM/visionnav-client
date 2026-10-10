@@ -170,10 +170,10 @@ await check('no se guarda sin detección, sin audio (formal) o sin reproducir', 
 await check('decisión: el cliente envía solo la alternativa elegida (nunca la esperada)', () => {
   const p = m.buildResponsePayload({
     pruebaId: 'X', modo: 'ensayo', plays: [], tiempoRespuestaMs: null, transcripcion: '', comprension: { objetos: [], objetos_inventados: [], relaciones: [] },
-    decision: { seleccionada: 'izquierda', coincide_con_narrativa: true }, escalas: m.EMPTY_ESCALAS, criterios: {}, errores: [],
+    decision: { seleccionadas: ['izquierda'], coincide_con_narrativa: true }, escalas: m.EMPTY_ESCALAS, criterios: {}, errores: [],
     aspectosConfusos: '', comentarios: '', observaciones: '',
   })
-  assert.deepEqual(p.decision, { seleccionada: 'izquierda', coincide_con_narrativa: true })
+  assert.deepEqual(p.decision, { seleccionadas: ['izquierda'], coincide_con_narrativa: true })
   assert.ok(!('ruta' in p) && !JSON.stringify(p).includes('esperada'))
 })
 
@@ -367,6 +367,42 @@ await check('contraste de los colores del instrumento ≥ 4.5:1 (WCAG AA)', () =
     ['#0F5C47', '#E1F5EE'], ['#FFFFFF', '#B42318'], ['#0F6E56', '#FFFFFF'],
   ]
   for (const [fg, bg] of pairs) assert.ok(ratio(fg, bg) >= 4.5, `${fg} sobre ${bg}: ${ratio(fg, bg).toFixed(2)}`)
+})
+
+// ── Codificación con referencia (estudio v2): marcar sin transcribir ──
+const csrc = readFileSync(new URL('lib/study-coding.ts', root), 'utf8')
+const cfile = join(mkdtempSync(join(tmpdir(), 'study-')), 'study-coding.mjs')
+writeFileSync(cfile, ts.transpileModule(csrc, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } }).outputText)
+const c = await import('file://' + cfile.replace(/\\/g, '/'))
+const ref1 = { objetos: [{ nombre: 'Planta', lado: 'izquierda', pasos: 2 }, { nombre: 'Silla', lado: 'frente', pasos: 4 }],
+  relacion: { pregunta: '¿Cuál está más cerca de usted?', respuesta: 'Planta' } }
+await check('codificación OBJ-01: objetos nombrados, inventados y pregunta de relación', () => {
+  const st = { ...c.EMPTY_CODING, nombrados: { Planta: true }, inventados: 'mesa, ', cercano: 'Silla' }
+  const out = c.codingToPayload(['objetos', 'relaciones'], ref1, st)
+  assert.deepEqual(out.comprension.objetos.map((o) => [o.objeto, o.identificado]), [['Planta', true], ['Silla', false]])
+  assert.deepEqual(out.comprension.objetos_inventados, ['mesa'])
+  assert.equal(out.comprension.relaciones[0].comprendida, 'no')
+  assert.equal(c.codingBlockers(['objetos', 'relaciones'], ref1, c.EMPTY_CODING, false).length, 1)
+})
+await check('codificación OBJ-02: lado y pasos (±1) frente a la narrativa', () => {
+  const st = { ...c.EMPTY_CODING, lados: { Planta: 'izquierda', Silla: 'derecha' }, pasos: { Planta: '3', Silla: '7' } }
+  const o = c.codingToPayload(['ubicacion', 'distancia'], ref1, st).comprension.objetos
+  assert.deepEqual(o.map((x) => [x.ubicacion_correcta, x.distancia_correcta]), [['si', 'si'], ['no', 'no']])
+  assert.equal(c.pasosCoinciden('', 4), 'no_reportada')
+  assert.ok(c.codingBlockers(['ubicacion'], ref1, { ...c.EMPTY_CODING, lados: { Planta: 'izquierda' } }, false)[0].includes('Silla'))
+})
+await check('codificación OBJ-04: cambios percibidos, direcciones varias y edición', () => {
+  const ref4 = { cambios: ['La silla pasó a la izquierda'] }
+  const st = { ...c.EMPTY_CODING, notoCambio: 'si', cambios: ['La silla pasó a la izquierda'], direcciones: ['frente', 'derecha'] }
+  const out = c.codingToPayload(['cambio'], ref4, st)
+  assert.equal(out.percepcion_cambio, 'menciona_cambio_real')
+  assert.deepEqual(out.cambios_percibidos, ['La silla pasó a la izquierda'])
+  assert.equal(c.codingToPayload(['cambio'], ref4, { ...st, cambios: [], cambioOtro: 'apareció una mesa' }).percepcion_cambio, 'menciona_cambio_inexistente')
+  assert.equal(c.codingBlockers(['cambio'], ref4, { ...c.EMPTY_CODING }, true).length, 2)
+  const back = c.codingFromRecord({ comprension: null, percepcion_cambio: 'menciona_cambio_real', cambios_percibidos: st.cambios,
+    cambio_otro: null, decision: { seleccionadas: ['frente', 'derecha'] } }, ref4)
+  assert.deepEqual([back.notoCambio, back.cambios, back.direcciones], ['si', st.cambios, ['frente', 'derecha']])
+  assert.deepEqual(c.vigentes([{ response_id: 'R001' }, { response_id: 'R002', reemplaza: 'R001' }]).map((r) => r.response_id), ['R002'])
 })
 
 console.log(`\n${n} verificaciones OK`)

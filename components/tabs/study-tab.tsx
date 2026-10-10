@@ -29,9 +29,12 @@ import { FieldInfo } from '@/components/study/field-info'
 import { DownloadEvidenceButton } from '@/components/study/download-evidence'
 import { MeetingAudioControl } from '@/components/study/meeting-audio-control'
 import { FIELD_HELP } from '@/lib/study-help'
+import { vigentes } from '@/lib/study-coding'
+import type { StudyResponseRecord } from '@/lib/study-protocol'
 
-/** Identificador interno de la práctica (no es una prueba del catálogo). */
+/** Identificadores internos de la práctica y del cierre (no son pruebas del catálogo). */
 const PRACTICA = '__practica__'
+const CIERRE = '__cierre__'
 import { cn } from '@/lib/utils'
 
 interface StudyTabProps {
@@ -39,16 +42,17 @@ interface StudyTabProps {
   isActive: boolean
 }
 
-type View = 'list' | 'wizard' | 'session' | 'close' | 'results'
+type View = 'list' | 'wizard' | 'session' | 'results'
 
 /**
  * Evaluación con usuarios (Objetivo 3). Instrumento operado por el investigador:
  * el participante escucha el audio de la API y responde verbalmente.
  *
- * Flujo: participante (ficha y contexto) → consentimiento (lectura grabada + 4
- * afirmaciones) → confirmar → práctica (escena de familiarización, ensayo) → pruebas
- * del catálogo en orden → audio CONGELADO de la escena → respuesta y codificación →
- * notas → guardar → siguiente prueba → finalizar (cuestionario breve) → resultados.
+ * Flujo (estudio v2, 2026-10-10): consentimiento (lectura grabada + 4 afirmaciones) →
+ * preguntas iniciales → confirmar → práctica → pruebas en orden (audio CONGELADO y luego
+ * las preguntas) → cierre y comentarios finales (al final de la lista) → resultados.
+ * Las pruebas visitadas quedan montadas: al volver a una, lo marcado sigue ahí. Las
+ * respuestas guardadas y el cierre se pueden editar, también con la sesión finalizada.
  *
  * Solo participantes objetivo (decisión de los directores, 2026-10-09). La evidencia de cada
  * sesión se descarga en un .zip (Excel + audios) con «Descargar evidencia».
@@ -62,6 +66,8 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [selectedTestId, setSelectedTestId] = useState<string | null>(null)
   const [runnerKey, setRunnerKey] = useState(0)
+  // Pruebas abiertas en esta sesión: siguen montadas (ocultas) para no perder lo marcado.
+  const [visited, setVisited] = useState<string[]>([])
   const [toDelete, setToDelete] = useState<SessionListItem | null>(null)
   const [announce, setAnnounce] = useState('')
   const titleRef = useRef<HTMLHeadingElement>(null)
@@ -105,7 +111,22 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
   const formalTests = sesion
     ? [...trackTests, ...otherTrackTests].filter((t) => executionRule(t, sesion.tipo_participante, sesion.es_prueba_tecnica).formal)
     : []
+  useEffect(() => {
+    if (selectedTestId && !visited.includes(selectedTestId)) setVisited((v) => [...v, selectedTestId])
+  }, [selectedTestId, visited])
+  // Respuesta vigente (no corregida) más reciente de cada prueba, para verla o editarla.
+  const existingByTest = useMemo(() => {
+    const m = new Map<string, StudyResponseRecord>()
+    const practiceIds = new Set((catalogApi.catalog?.estimulos ?? []).filter((s) => s.practica).map((s) => s.stimulus_id))
+    for (const r of vigentes(detail.data?.respuestas ?? [])) {
+      const key = r.estimulo?.stimulus_id && practiceIds.has(r.estimulo.stimulus_id) ? PRACTICA : r.prueba.id
+      if (key !== PRACTICA && r.modo !== 'formal' && !sesion?.es_prueba_tecnica) continue
+      m.set(key, r)
+    }
+    return m
+  }, [detail.data, catalogApi.catalog, sesion])
   const isPractice = selectedTestId === PRACTICA
+  const isClosing = selectedTestId === CIERRE
   // La práctica usa la pregunta de identificación de objetos (la primera prueba objetivo que
   // codifica objetos, sin fijar su id) con la escena de práctica, en modo ensayo.
   const practiceTest =
@@ -122,6 +143,7 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
   const openSession = (id: string, v: View = 'session') => {
     setActiveId(id)
     setSelectedTestId(null)
+    setVisited([])
     setView(v)
   }
 
@@ -137,9 +159,10 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
     const pending =
       orderedTests.slice(idx + 1).find(runnable) ??
       formalTests.find((t) => !formalDone.has(t.id) && t.id !== selectedTestId)
-    setSelectedTestId(pending?.id ?? null)
+    // Sin pruebas pendientes, el siguiente paso es el cierre y los comentarios finales.
+    setSelectedTestId(pending?.id ?? CIERRE)
     setRunnerKey((k) => k + 1)
-    setAnnounce(pending ? `Siguiente prueba: ${pending.id}` : 'No quedan pruebas pendientes en esta sesión.')
+    setAnnounce(pending ? `Siguiente prueba: ${pending.id}` : 'Cierre y comentarios finales.')
   }
 
   // ── Encabezado común ──
@@ -322,48 +345,20 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
     sesion.estado === 'finalizada' ? 'finalizada' : 'en curso'
   }`
 
-  if (view === 'results' || sesion.estado === 'finalizada') {
+  if (view === 'results') {
     return (
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           {header(title, subtitle)}
           <div className="flex flex-wrap gap-2">
             <DownloadEvidenceButton baseUrl={baseUrl} sessionId={sesion.session_id} codigo={sesion.codigo} />
-            {sesion.estado === 'en_curso' && (
-              <Button variant="outline" size="sm" onClick={() => setView('session')}>
-                Ir a las pruebas
-              </Button>
-            )}
+            <Button variant="outline" size="sm" className="gap-1" onClick={() => setView('session')}>
+              {sesion.estado === 'en_curso' ? 'Ir a las pruebas' : 'Ver y editar respuestas'}
+            </Button>
             {back}
           </div>
         </div>
         {detail.data && <SessionResults baseUrl={baseUrl} detail={detail.data} />}
-      </div>
-    )
-  }
-
-  if (view === 'close') {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          {header(title, subtitle)}
-          {back}
-        </div>
-        <SessionClose
-          isLoading={actions.close.isLoading}
-          error={actions.close.error}
-          pendingTests={formalTests.filter((t) => !formalDone.has(t.id)).map((t) => t.id)}
-          onCancel={() => setView('session')}
-          onClose={async (payload) => {
-            const r = await actions.close.run(sesion.session_id, payload)
-            if (r) {
-              setAnnounce(`Sesión ${sesion.codigo} finalizada.`)
-              detail.refresh()
-              sessions.refresh()
-              setView('results')
-            }
-          }}
-        />
       </div>
     )
   }
@@ -376,10 +371,7 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
       <li key={t.id} className="flex items-start gap-1">
         <button
           type="button"
-          onClick={() => {
-            setSelectedTestId(t.id)
-            setRunnerKey((k) => k + 1)
-          }}
+          onClick={() => setSelectedTestId(t.id)}
           aria-current={selectedTestId === t.id ? 'true' : undefined}
           className={cn(
             'flex-1 min-w-0 text-left p-3 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4B45A8]',
@@ -411,9 +403,11 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
           <Button variant="outline" size="sm" className="gap-1" onClick={() => setView('results')}>
             <ListChecks className="w-4 h-4" aria-hidden="true" /> Resultados
           </Button>
-          <Button size="sm" className={`gap-1 ${primaryButtonClass}`} onClick={() => setView('close')}>
-            <Flag className="w-4 h-4" aria-hidden="true" /> Finalizar sesión
-          </Button>
+          {sesion.estado === 'en_curso' && (
+            <Button size="sm" className={`gap-1 ${primaryButtonClass}`} onClick={() => setSelectedTestId(CIERRE)}>
+              <Flag className="w-4 h-4" aria-hidden="true" /> Cierre y finalizar
+            </Button>
+          )}
           {back}
         </div>
       </div>
@@ -452,10 +446,7 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
             <div className="flex items-start gap-1">
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedTestId(PRACTICA)
-                  setRunnerKey((k) => k + 1)
-                }}
+                onClick={() => setSelectedTestId(PRACTICA)}
                 aria-current={isPractice ? 'true' : undefined}
                 className={cn(
                   'flex-1 min-w-0 text-left p-3 rounded-lg border border-dashed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4B45A8]',
@@ -472,29 +463,72 @@ export function StudyTab({ baseUrl, isActive }: StudyTabProps) {
             </div>
           )}
           <ul className="space-y-2">{trackTests.map(renderTest)}</ul>
+          <button
+            type="button"
+            onClick={() => setSelectedTestId(CIERRE)}
+            aria-current={isClosing ? 'true' : undefined}
+            className={cn(
+              'w-full text-left p-3 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4B45A8]',
+              isClosing ? 'border-[#4B45A8] bg-[#EEEDFE]' : 'border-border bg-card hover:border-[#4B45A8]/60'
+            )}
+          >
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium text-foreground">Cierre y comentarios finales</span>
+              {sesion.estado !== 'en_curso' && <CheckCircle2 className="w-4 h-4 text-[#0F6E56] shrink-0" aria-hidden="true" />}
+            </span>
+            <span className="text-xs mt-0.5 block text-muted-foreground">
+              {sesion.estado !== 'en_curso' ? 'Sesión finalizada · se puede editar' : 'Preguntas finales, comentarios y finalizar'}
+            </span>
+          </button>
         </nav>
 
-        <div ref={runnerRef} className="lg:col-span-2 scroll-mt-20">
-          {!selectedTest ? (
+        <div ref={runnerRef} className="lg:col-span-2 scroll-mt-20 space-y-4">
+          {!selectedTestId && (
             <div className="h-full flex items-center justify-center rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
               Seleccione una prueba del catálogo para comenzar.
             </div>
-          ) : (
-            <TestRunner
-              key={`${isPractice ? PRACTICA : selectedTest.id}-${runnerKey}`}
-              practice={isPractice}
-              baseUrl={baseUrl}
+          )}
+          {isClosing && (
+            <SessionClose
               sesion={sesion}
-              test={selectedTest}
-              stimuli={catalogApi.catalog?.estimulos ?? []}
-              usedStimuli={usedStimuli}
-              onSaved={() => {
+              isLoading={actions.close.isLoading}
+              error={actions.close.error}
+              pendingTests={formalTests.filter((t) => !formalDone.has(t.id)).map((t) => t.id)}
+              onClose={async (payload) => {
+                const r = await actions.close.run(sesion.session_id, payload)
+                if (!r) return false
+                setAnnounce(`Cierre de la sesión ${sesion.codigo} guardado.`)
                 detail.refresh()
                 sessions.refresh()
+                return true
               }}
-              onNext={goNext}
             />
           )}
+          {visited
+            .filter((id) => id !== CIERRE)
+            .map((id) => {
+              const t = id === PRACTICA ? practiceTest : [...trackTests, ...otherTrackTests].find((x) => x.id === id)
+              if (!t) return null
+              return (
+                <div key={id} hidden={id !== selectedTestId}>
+                  <TestRunner
+                    practice={id === PRACTICA}
+                    active={id === selectedTestId}
+                    baseUrl={baseUrl}
+                    sesion={sesion}
+                    test={t}
+                    stimuli={catalogApi.catalog?.estimulos ?? []}
+                    usedStimuli={usedStimuli}
+                    existing={existingByTest.get(id) ?? null}
+                    onSaved={() => {
+                      detail.refresh()
+                      sessions.refresh()
+                    }}
+                    onNext={goNext}
+                  />
+                </div>
+              )
+            })}
         </div>
       </div>
     </div>

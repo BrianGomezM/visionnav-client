@@ -141,6 +141,8 @@ export interface Sesion {
     entrevista: string | null
     incidencias_tecnicas: string | null
     observaciones_generales: string | null
+    grabacion?: null | { archivo: string | null; almacenada: boolean; content_type: string; tamano_bytes: number; sha256: string; duracion_s: number | null }
+    editado_en?: string
   }
 }
 
@@ -209,8 +211,10 @@ export interface Ejecucion {
  * auditiva; el participante no se desplaza (doc. 27, §H).
  */
 export interface DecisionPayload {
-  /** id de una alternativa del catálogo, o 'no_responde'. */
-  seleccionada: string
+  /** Direcciones por las que dijo que podría avanzar (estudio v2), o ['no_responde']. */
+  seleccionadas: string[]
+  /** Compatibilidad: en registros guardados, las elegidas unidas con «+». */
+  seleccionada?: string
   /** Codificación del investigador: ¿la elección sigue lo que dijo la narrativa? */
   coincide_con_narrativa: boolean | null
 }
@@ -228,6 +232,9 @@ export interface DecisionRecord extends DecisionPayload {
   narrativa_coincide_con_diseno?: boolean | null
   juicio_investigador?: boolean | null
   esperada: string | null
+  direcciones_libres?: string[] | null
+  incluye_direccion_narrativa?: boolean | null
+  elige_direccion_bloqueada?: boolean | null
   correcto: boolean | null
   fuente_esperada: 'definicion' | 'fixture_tecnico' | 'no_definida'
   fixture_tecnico: string | null
@@ -247,6 +254,10 @@ export interface ResponsePayload {
   /** Tarea de decisión (tipo C). La esperada NO se envía: la aplica el servidor. */
   decision?: DecisionPayload
   percepcion_cambio?: PercepcionCambio
+  cambios_percibidos?: string[]
+  cambio_otro?: string
+  /** Edición: respuesta anterior de la misma prueba que esta corrige. */
+  reemplaza?: string
   aclaraciones?: Aclaracion[]
   escalas?: Partial<Escalas>
   criterios?: Record<string, number>
@@ -290,6 +301,9 @@ export interface StudyResponseRecord {
   comprension: Comprension | null
   decision?: DecisionRecord | null
   percepcion_cambio?: PercepcionCambio | null
+  cambios_percibidos?: string[]
+  cambio_otro?: string | null
+  reemplaza?: string | null
   aclaraciones?: Aclaracion[]
   escalas: Escalas | null
   criterios: Record<string, number> | null
@@ -438,16 +452,16 @@ export const ACLARACION_OPTS: [TipoAclaracion, string][] = [
  * Anclas verbales de las escalas 1–5: las mismas para todas las preguntas y leídas en voz
  * alta completas (definidas el 2026-10-01, docs/EVALUACION_USUARIOS.md §0).
  */
-export const ANCLAS: [number, string][] = [[1, 'nada'], [2, 'poco'], [3, 'moderadamente'], [4, 'bastante'], [5, 'muy']]
-export const ANCLAS_TEXTO = '1 nada · 2 poco · 3 moderadamente · 4 bastante · 5 muy'
+export const ANCLAS: [number, string][] = [[1, 'nada'], [2, 'poco'], [3, 'más o menos'], [4, 'bastante'], [5, 'mucho']]
+export const ANCLAS_TEXTO = '1 nada · 2 poco · 3 más o menos · 4 bastante · 5 mucho'
 
 /**
  * Escalas del cuestionario posterior (cierre). Solo lo que no preguntan OBJ-05/06/07, para
  * no repetir preguntas (naturalidad, suficiencia, redundancia y utilidad ya se preguntan allí).
  */
 export const ESCALAS: { key: keyof Escalas; label: string; ayuda: string }[] = [
-  { key: 'claridad', label: 'Claridad de las descripciones', ayuda: `${ANCLAS_TEXTO} (clara)` },
-  { key: 'carga_percibida', label: 'Esfuerzo para seguir las descripciones (métrica débil)', ayuda: `${ANCLAS_TEXTO} (esfuerzo; más alto = más esfuerzo)` },
+  { key: 'claridad', label: 'Facilidad para entender las descripciones', ayuda: ANCLAS_TEXTO },
+  { key: 'carga_percibida', label: 'Esfuerzo para seguir las descripciones', ayuda: `${ANCLAS_TEXTO} (más alto = más esfuerzo)` },
 ]
 
 export const EMPTY_ESCALAS: Escalas = {
@@ -673,6 +687,9 @@ export interface ResponseDraft {
   comprension: Comprension
   decision?: DecisionPayload
   percepcionCambio?: PercepcionCambio | null
+  cambiosPercibidos?: string[]
+  cambioOtro?: string
+  reemplaza?: string | null
   aclaraciones?: Aclaracion[]
   /** Qué codifica la prueba (catálogo): sin codificación no se envía la comprensión. */
   codificacion?: Codificacion[]
@@ -701,6 +718,9 @@ export function buildResponsePayload(d: ResponseDraft): ResponsePayload {
   if (comp) payload.comprension = comp
   if (d.decision) payload.decision = d.decision
   if (d.percepcionCambio) payload.percepcion_cambio = d.percepcionCambio
+  if (d.cambiosPercibidos?.length) payload.cambios_percibidos = d.cambiosPercibidos
+  if (d.cambioOtro && opt(d.cambioOtro)) payload.cambio_otro = opt(d.cambioOtro)
+  if (d.reemplaza) payload.reemplaza = d.reemplaza
   if (d.aclaraciones?.length) payload.aclaraciones = d.aclaraciones
   const esc = cleanEscalas(d.escalas)
   if (esc) payload.escalas = esc

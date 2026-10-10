@@ -145,6 +145,8 @@ function ConsentSummary({ baseUrl, detail }: { baseUrl: string; detail: SessionD
 /** Resultados recuperados del servidor: resumen descriptivo + una fila por respuesta. */
 export function SessionResults({ baseUrl, detail }: { baseUrl: string; detail: SessionDetail }) {
   const { sesion, respuestas, resumen } = detail
+  // Respuestas corregidas: siguen en la lista (el servidor conserva ambas) pero no cuentan en el resumen.
+  const corregidaPor = new Map(respuestas.filter((r) => r.reemplaza).map((r) => [r.reemplaza as string, r.response_id]))
   return (
     <section aria-labelledby="results-title" className="space-y-4">
       <h3 id="results-title" className="font-medium">
@@ -188,8 +190,12 @@ export function SessionResults({ baseUrl, detail }: { baseUrl: string; detail: S
           </thead>
           <tbody>
             {respuestas.map((r) => (
-              <tr key={r.response_id} className="border-b border-border align-top">
-                <th scope="row" className="py-2 pr-3 font-mono text-xs">{r.response_id}</th>
+              <tr key={r.response_id} className={`border-b border-border align-top ${corregidaPor.has(r.response_id) ? 'opacity-60' : ''}`}>
+                <th scope="row" className="py-2 pr-3 font-mono text-xs">
+                  {r.response_id}
+                  {corregidaPor.has(r.response_id) && <span className="block font-sans text-muted-foreground">corregida por {corregidaPor.get(r.response_id)}</span>}
+                  {r.reemplaza && <span className="block font-sans text-muted-foreground">corrige {r.reemplaza}</span>}
+                </th>
                 <td className="py-2 pr-3">{r.prueba.id}</td>
                 <td className="py-2 pr-3">{r.modo}</td>
                 <td className="py-2 pr-3 text-xs">
@@ -210,6 +216,7 @@ export function SessionResults({ baseUrl, detail }: { baseUrl: string; detail: S
                       }`
                     : '—'}
                   {r.percepcion_cambio && ` · cambio: ${PERCEPCION_CAMBIO_OPTS.find(([k]) => k === r.percepcion_cambio)?.[1]}`}
+                  {r.cambios_percibidos?.length ? ` (${r.cambios_percibidos.join('; ')})` : ''}
                 </td>
                 <td className="py-2 pr-3 text-xs">
                   {[...r.errores_derivados.map((e) => `${e.tipo}: ${e.elemento}`), ...r.errores.map((e) => `${e.tipo}: ${e.descripcion}`)].join(' · ') || '—'}

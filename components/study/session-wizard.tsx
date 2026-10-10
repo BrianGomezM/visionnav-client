@@ -41,10 +41,11 @@ import { ConsentDownloadLinks, ConsentText } from '@/components/study/consent-do
 import { AudioRecorder } from '@/components/study/participant-recorder'
 import { MeetingAudioControl } from '@/components/study/meeting-audio-control'
 
-const STEPS = ['Participante', 'Consentimiento', 'Confirmar'] as const
+// Estudio v2 (2026-10-10): primero el consentimiento, que da el aval para cualquier pregunta.
+const STEPS = ['Consentimiento', 'Participante', 'Confirmar'] as const
 
 const EMPTY_FICHA: Ficha = {
-  condicion_visual: { tipo_ceguera: 'congenita', etapa_adquisicion: null, experiencia_visual_previa: null },
+  condicion_visual: { tipo_ceguera: 'congenita', etapa_adquisicion: null, experiencia_visual_previa: 'no' },
   tecnologias: { utiliza: [], otra_descripcion: null, lectores_pantalla: [], lector_otro: null, frecuencia_uso: null },
   experiencia_descripcion_audio: 'no_informa',
   rango_edad: null,
@@ -74,8 +75,8 @@ function blobToBase64(blob: Blob): Promise<string> {
 }
 
 /**
- * Registro de la sesión en 3 pasos: participante (ficha y contexto de la sesión) →
- * consentimiento (lectura grabada + 4 afirmaciones) → confirmar. No se guarda NADA en
+ * Registro de la sesión en 3 pasos (estudio v2): consentimiento (lectura grabada + 4
+ * afirmaciones) → preguntas iniciales (ficha y contexto) → confirmar. No se guarda NADA en
  * el servidor hasta el último paso; el servidor rechaza la sesión sin las cuatro
  * afirmaciones o sin la grabación del consentimiento.
  */
@@ -170,8 +171,8 @@ export function SessionWizard({
   }
 
   const stepValid = [
-    Object.keys(participantErrors).length === 0 && Object.keys(contextErrors).length === 0,
     Boolean(consent && consentComplete(consent) && recording) && Object.keys(actaErrors).length === 0,
+    Object.keys(participantErrors).length === 0 && Object.keys(contextErrors).length === 0,
     true,
   ]
 
@@ -254,8 +255,8 @@ export function SessionWizard({
         Paso {step + 1} de {STEPS.length}: {STEPS[step]}
       </h4>
 
-      {/* ── Paso 1: participante, ficha mínima y contexto de la sesión ── */}
-      {step === 0 && (
+      {/* ── Paso 2: participante, ficha mínima y contexto de la sesión ── */}
+      {step === 1 && (
         <div className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="text-sm">
@@ -282,7 +283,14 @@ export function SessionWizard({
                 name="ceguera"
                 options={CEGUERA_OPTS.filter(([v]) => v !== 'no_aplica')}
                 value={cv.tipo_ceguera}
-                onChange={(v) => setCv({ tipo_ceguera: v, etapa_adquisicion: v === 'adquirida' ? cv.etapa_adquisicion : null })}
+                onChange={(v) =>
+                  setCv({
+                    tipo_ceguera: v,
+                    etapa_adquisicion: v === 'adquirida' ? cv.etapa_adquisicion : null,
+                    // Se deduce del tipo de ceguera (estudio v2): de nacimiento → no; adquirida → sí.
+                    experiencia_visual_previa: v === 'adquirida' ? 'si' : v === 'congenita' ? 'no' : cv.experiencia_visual_previa,
+                  })
+                }
                 error={err(participantErrors, 'tipo_ceguera')}
                 required
               />
@@ -297,16 +305,6 @@ export function SessionWizard({
                   required
                 />
               )}
-              <RadioGroupField
-                legend="¿Tuvo experiencia visual previa?"
-                name="exp-visual"
-                options={SINO_OPTS}
-                value={cv.experiencia_visual_previa}
-                onChange={(v) => setCv({ experiencia_visual_previa: v })}
-                error={err(participantErrors, 'experiencia_visual_previa')}
-                hint="Solo para interpretar la comprensión de objetos y relaciones espaciales. No se registra historia clínica."
-                required
-              />
             </div>
           )}
 
@@ -434,10 +432,10 @@ export function SessionWizard({
         </div>
       )}
 
-      {/* ── Paso 2: consentimiento leído en voz alta y grabado ── */}
-      {/* Se mantiene montado (oculto) para no perder la grabación al volver al paso 1. */}
+      {/* ── Paso 1: consentimiento leído en voz alta y grabado ── */}
+      {/* Se mantiene montado (oculto) para no perder la grabación al pasar a otro paso. */}
       {tipo && doc && (
-        <div className="space-y-4" hidden={step !== 1}>
+        <div className="space-y-4" hidden={step !== 0}>
           <div className="flex gap-2 p-3 rounded-lg bg-[#EEEDFE] text-[#2E2A6B] text-sm">
             <Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
             <ol className="list-decimal pl-4 space-y-0.5">
@@ -626,7 +624,7 @@ export function SessionWizard({
           <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Anterior
         </Button>
         {step < STEPS.length - 1 ? (
-          <Button onClick={next} disabled={step === 1 && anyNo} className={`gap-2 ${primaryButtonClass}`}>
+          <Button onClick={next} disabled={step === 0 && anyNo} className={`gap-2 ${primaryButtonClass}`}>
             Siguiente <ArrowRight className="w-4 h-4" aria-hidden="true" />
           </Button>
         ) : (
