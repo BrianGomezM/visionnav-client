@@ -1,5 +1,12 @@
-import { Clock, Layers, Box, ImageIcon, Gauge } from 'lucide-react'
+import { Clock, Layers, Box, ImageIcon, Gauge, Volume2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+/** "azure:es-CO-SalomeNeural" → "Azure AI Speech · es-CO-SalomeNeural"; "models/gemini-…" → "Gemini TTS · gemini-…" */
+function vozLegible(id?: string): string | null {
+  if (!id) return null
+  if (id.startsWith('azure:')) return `Azure AI Speech · ${id.slice('azure:'.length)}`
+  return `Gemini TTS · ${id.replace(/^models\//, '')}`
+}
 
 interface SceneMetricsProps {
   escenario: {
@@ -17,11 +24,19 @@ interface SceneMetricsProps {
       procesada: string
     }
     tts_ms?: number
+    tts_modelo?: string
     llm_ms: number
   }
+  /** true si la respuesta trae audio: solo entonces el tiempo de voz cuenta en el total. */
+  audioDisponible?: boolean
 }
 
-export function SceneMetrics({ escenario, metricas }: SceneMetricsProps) {
+export function SceneMetrics({ escenario, metricas, audioDisponible = false }: SceneMetricsProps) {
+  // total_ms de la API no incluye la síntesis de voz; aquí se muestra el tiempo completo.
+  const ttsMs = audioDisponible && metricas.tts_ms !== undefined ? metricas.tts_ms : null
+  const totalMs = metricas.total_ms + (ttsMs ?? 0)
+  const voz = audioDisponible ? vozLegible(metricas.tts_modelo) : null
+
   const confidenceColors = {
     alta: 'bg-[#E1F5EE] text-[#0F6E56]',
     media: 'bg-[#FAEEDA] text-[#BA7517]',
@@ -58,21 +73,31 @@ export function SceneMetrics({ escenario, metricas }: SceneMetricsProps) {
       </p>
 
       {/* Metrics tiles */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
         <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-muted/50">
           <Clock className="w-4 h-4 text-muted-foreground mb-1" aria-hidden="true" />
           <span className="text-lg font-semibold text-foreground">
             {metricas.deteccion_ms.toFixed(0)}
           </span>
-          <span className="text-xs text-muted-foreground">ms deteccion</span>
+          <span className="text-xs text-muted-foreground text-center">ms detección</span>
+        </div>
+
+        <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-muted/50">
+          <Volume2 className="w-4 h-4 text-muted-foreground mb-1" aria-hidden="true" />
+          <span className="text-lg font-semibold text-foreground">
+            {ttsMs !== null ? ttsMs.toFixed(0) : '—'}
+          </span>
+          <span className="text-xs text-muted-foreground text-center">ms voz</span>
         </div>
 
         <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-muted/50">
           <Layers className="w-4 h-4 text-muted-foreground mb-1" aria-hidden="true" />
           <span className="text-lg font-semibold text-foreground">
-            {metricas.total_ms.toFixed(0)}
+            {totalMs.toFixed(0)}
           </span>
-          <span className="text-xs text-muted-foreground">ms total</span>
+          <span className="text-xs text-muted-foreground text-center">
+            {ttsMs !== null ? 'ms total (con voz)' : 'ms total (sin voz)'}
+          </span>
         </div>
 
         <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-muted/50">
@@ -80,7 +105,7 @@ export function SceneMetrics({ escenario, metricas }: SceneMetricsProps) {
           <span className="text-lg font-semibold text-foreground">
             {metricas.objetos_detectados}
           </span>
-          <span className="text-xs text-muted-foreground">objetos</span>
+          <span className="text-xs text-muted-foreground text-center">objetos</span>
         </div>
 
         <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-muted/50">
@@ -88,7 +113,7 @@ export function SceneMetrics({ escenario, metricas }: SceneMetricsProps) {
           <span className="text-lg font-semibold text-foreground">
             {metricas.umbral_confianza}
           </span>
-          <span className="text-xs text-muted-foreground">umbral</span>
+          <span className="text-xs text-muted-foreground text-center">umbral</span>
         </div>
       </div>
 
@@ -106,8 +131,8 @@ export function SceneMetrics({ escenario, metricas }: SceneMetricsProps) {
       {/* Additional timing info */}
       <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t border-border text-xs text-muted-foreground">
         <span>LLM: <span className="font-mono text-foreground">{metricas.llm_ms.toFixed(0)} ms</span></span>
-        {metricas.tts_ms !== undefined && (
-          <span>TTS: <span className="font-mono text-foreground">{metricas.tts_ms.toFixed(0)} ms</span></span>
+        {voz && (
+          <span>Voz: <span className="font-mono text-foreground">{voz}</span></span>
         )}
       </div>
     </div>

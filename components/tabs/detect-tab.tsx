@@ -156,6 +156,7 @@ export function DetectTab({ baseUrl, confidenceThreshold, ttsModel }: DetectTabP
             <SceneMetrics
               escenario={data.escenario}
               metricas={data.metricas}
+              audioDisponible={data.audio?.disponible || false}
             />
             {data.umbral && <ObjectThresholds umbral={data.umbral} />}
           </>
